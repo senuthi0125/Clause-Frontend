@@ -1,16 +1,17 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
+import { UserButton, useUser } from "@clerk/clerk-react";
 import {
-  Bot,
   CalendarDays,
+  ClipboardList,
   FileText,
   GitBranch,
   LayoutDashboard,
   ShieldAlert,
   ShieldCheck,
+  SlidersHorizontal,
   Users,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -22,7 +23,12 @@ const navItems = [
   { label: "Conflict Detection", icon: ShieldCheck, href: "/conflict-detection" },
   { label: "Calendar", icon: CalendarDays, href: "/calendar" },
   { label: "Workflows", icon: GitBranch, href: "/workflows" },
-  { label: "Admin", icon: Users, href: "/admin" },
+];
+
+const adminNavItems = [
+  { label: "Admin Overview", icon: SlidersHorizontal, href: "/admin" },
+  { label: "User Management", icon: Users, href: "/admin/users" },
+  { label: "Audit Logs", icon: ClipboardList, href: "/admin/audit" },
 ];
 
 type AppShellProps = {
@@ -83,6 +89,33 @@ export function AppShell({
                   );
                 })}
               </nav>
+
+              <div className="mt-5 px-2 pb-2 text-xs uppercase tracking-[0.16em] text-slate-400">
+                Admin Controls
+              </div>
+              <nav className="space-y-1.5">
+                {adminNavItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <NavLink
+                      key={item.label}
+                      to={item.href}
+                      end={item.href === "/admin"}
+                      className={({ isActive }) =>
+                        cn(
+                          "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm transition cursor-pointer",
+                          isActive
+                            ? "bg-white text-slate-900 shadow-sm"
+                            : "text-slate-300 hover:bg-white/5 hover:text-white"
+                        )
+                      }
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span>{item.label}</span>
+                    </NavLink>
+                  );
+                })}
+              </nav>
             </div>
 
             <div className="px-6 pt-2">
@@ -121,25 +154,7 @@ export function AppShell({
               </div>
             </ScrollArea>
 
-            <div className="m-4 rounded-[24px] border border-slate-200 bg-white p-5 text-slate-900 shadow-sm">
-              <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-100">
-                  <Bot className="h-5 w-5 text-violet-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold">Backend connected</p>
-                  <p className="text-xs text-slate-500">
-                    These pages now use live API data
-                  </p>
-                </div>
-              </div>
-              <Button
-                className="w-full rounded-xl bg-slate-900 text-white hover:bg-slate-800"
-                asChild
-              >
-                <NavLink to="/ai-analysis">Open AI tools</NavLink>
-              </Button>
-            </div>
+            <UserCard />
           </div>
         </aside>
 
@@ -161,6 +176,39 @@ export function AppShell({
           </div>
           <div className="px-5 py-5 md:px-7">{children}</div>
         </main>
+      </div>
+    </div>
+  );
+}
+
+function UserCard() {
+  const { user, isLoaded } = useUser();
+  const displayName =
+    user?.fullName ||
+    user?.username ||
+    user?.primaryEmailAddress?.emailAddress ||
+    "Signed in";
+  const email = user?.primaryEmailAddress?.emailAddress ?? "";
+
+  return (
+    <div className="m-4 rounded-[24px] border border-slate-200 bg-white p-4 text-slate-900 shadow-sm">
+      <div className="flex items-center gap-3">
+        <UserButton
+          afterSignOutUrl="/sign-in"
+          appearance={{
+            elements: { avatarBox: "h-10 w-10" },
+          }}
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold">
+            {isLoaded ? displayName : "Loading..."}
+          </p>
+          {email ? (
+            <p className="truncate text-xs text-slate-500">{email}</p>
+          ) : (
+            <p className="text-xs text-slate-500">Click avatar to sign out</p>
+          )}
+        </div>
       </div>
     </div>
   );

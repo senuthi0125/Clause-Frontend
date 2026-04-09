@@ -37,7 +37,7 @@ class ApiError extends Error {
   }
 }
 
-function getAuthToken(): string | null {
+function getStoredAuthToken(): string | null {
   if (typeof window === "undefined") return null;
   try {
     return window.localStorage.getItem("clause_auth_token");
@@ -46,8 +46,28 @@ function getAuthToken(): string | null {
   }
 }
 
+let tokenProvider: (() => Promise<string | null>) | null = null;
+
+export function setAuthTokenProvider(
+  provider: (() => Promise<string | null>) | null
+) {
+  tokenProvider = provider;
+}
+
+async function resolveToken(): Promise<string | null> {
+  if (tokenProvider) {
+    try {
+      const t = await tokenProvider();
+      if (t) return t;
+    } catch (err) {
+      console.warn("Auth token provider failed:", err);
+    }
+  }
+  return getStoredAuthToken();
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getAuthToken();
+  const token = await resolveToken();
   const response = await fetch(`${API_BASE_URL}${path}`, {
     headers: {
       "Content-Type": "application/json",
@@ -95,6 +115,24 @@ export function buildContractsQuery(
 
 export const api = {
   health: () => request<{ status: string; database: string }>("/health"),
+
+  syncUser: () =>
+    request<{
+      id?: string;
+      email?: string;
+      full_name?: string;
+      role?: string;
+      status?: string;
+    }>("/api/auth/sync", { method: "POST" }),
+
+  getMyProfile: () =>
+    request<{
+      id?: string;
+      email?: string;
+      full_name?: string;
+      role?: string;
+      status?: string;
+    }>("/api/auth/me"),
 
   getDashboardStats: () => request<DashboardStats>("/api/dashboard/stats"),
 
