@@ -7,7 +7,9 @@ import {
   ShieldAlert,
   Sparkles,
   Search,
+  LockKeyhole,
 } from "lucide-react";
+import { UserButton, useUser } from "@clerk/clerk-react";
 import { cn } from "@/lib/utils";
 
 type ContractGroup = {
@@ -23,39 +25,6 @@ type AppShellProps = {
   children: React.ReactNode;
 };
 
-const navigation = [
-  {
-    label: "Dashboard",
-    href: "/",
-    icon: LayoutDashboard,
-  },
-  {
-    label: "Contracts",
-    href: "/contracts",
-    icon: FileText,
-  },
-  {
-    label: "AI Analysis",
-    href: "/ai-analysis",
-    icon: Sparkles,
-  },
-  {
-    label: "Conflict Detection",
-    href: "/conflict-detection",
-    icon: Shield,
-  },
-  {
-    label: "Calendar",
-    href: "/calendar",
-    icon: CalendarDays,
-  },
-  {
-    label: "Risk Analysis",
-    href: "/risk-analysis",
-    icon: ShieldAlert,
-  },
-];
-
 function getInitials(title?: string) {
   if (!title) return "C";
   return title.trim().charAt(0).toUpperCase() || "C";
@@ -69,6 +38,56 @@ export function AppShell({
   children,
 }: AppShellProps) {
   const location = useLocation();
+  const { user } = useUser();
+
+  const role =
+    String(user?.publicMetadata?.role || user?.unsafeMetadata?.role || "")
+      .trim()
+      .toLowerCase();
+
+  const isAdmin = role === "admin";
+
+  const navigation = [
+    {
+      label: "Dashboard",
+      href: "/",
+      icon: LayoutDashboard,
+    },
+    {
+      label: "Contracts",
+      href: "/contracts",
+      icon: FileText,
+    },
+    {
+      label: "AI Analysis",
+      href: "/ai-analysis",
+      icon: Sparkles,
+    },
+    {
+      label: "Conflict Detection",
+      href: "/conflict-detection",
+      icon: Shield,
+    },
+    {
+      label: "Calendar",
+      href: "/calendar",
+      icon: CalendarDays,
+    },
+    {
+      label: "Risk Analysis",
+      href: "/risk-analysis",
+      icon: ShieldAlert,
+    },
+    ...(isAdmin
+      ? [
+          {
+            label: "Admin",
+            href: "/admin",
+            icon: LockKeyhole,
+          },
+        ]
+      : []),
+  ];
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -112,7 +131,7 @@ export function AppShell({
                         : "text-blue-50 hover:bg-white/8"
                     )}
                   >
-                    <Icon className="h-4.5 w-4.5 shrink-0" />
+                    <Icon className="h-[18px] w-[18px] shrink-0" />
                     <span className="truncate">{item.label}</span>
                   </Link>
                 );
@@ -183,8 +202,20 @@ export function AppShell({
                     </span>
                   </div>
 
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white text-base font-semibold text-emerald-900 shadow-sm">
-                    S
+                  <div className="flex items-center gap-3 rounded-full border border-slate-200 bg-white px-3 py-2 shadow-sm">
+                    <UserButton
+                      afterSignOutUrl="/sign-in"
+                      appearance={{
+                        elements: {
+                          avatarBox: "h-8 w-8",
+                        },
+                      }}
+                    />
+                    <span className="hidden max-w-[140px] truncate text-sm font-medium text-slate-700 md:inline">
+                      {user?.fullName ||
+                        user?.primaryEmailAddress?.emailAddress ||
+                        "Account"}
+                    </span>
                   </div>
                 </div>
               </div>
