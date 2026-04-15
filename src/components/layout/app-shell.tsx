@@ -1,4 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
 import {
   Bell,
   CalendarDays,
@@ -43,6 +44,7 @@ export function AppShell({
 }: AppShellProps) {
   const location = useLocation();
   const { user } = useUser();
+  const [adminMode, setAdminMode] = useState(false);
 
   const role = String(
     user?.publicMetadata?.role || user?.unsafeMetadata?.role || ""
@@ -51,6 +53,24 @@ export function AppShell({
     .toLowerCase();
 
   const isAdmin = role === "admin";
+
+  useEffect(() => {
+    if (!isAdmin) {
+      localStorage.removeItem("admin_mode");
+      setAdminMode(false);
+      return;
+    }
+
+    const stored = localStorage.getItem("admin_mode");
+    if (stored === "true") {
+      setAdminMode(true);
+    }
+
+    if (location.pathname.startsWith("/admin")) {
+      localStorage.setItem("admin_mode", "true");
+      setAdminMode(true);
+    }
+  }, [isAdmin, location.pathname]);
 
   const mainNavigation = [
     {
@@ -113,6 +133,13 @@ export function AppShell({
     },
   ];
 
+  const showAdminSection = isAdmin && adminMode;
+
+  const handleAdminClick = () => {
+    localStorage.setItem("admin_mode", "true");
+    setAdminMode(true);
+  };
+
   return (
     <div className="min-h-screen bg-slate-100">
       <div className="flex min-h-screen">
@@ -162,7 +189,7 @@ export function AppShell({
               })}
             </div>
 
-            {isAdmin ? (
+            {showAdminSection ? (
               <div className="mt-8">
                 <p className="px-3 text-[11px] uppercase tracking-[0.28em] text-blue-100/65">
                   Admin
@@ -260,6 +287,7 @@ export function AppShell({
                   {isAdmin ? (
                     <Link
                       to="/admin"
+                      onClick={handleAdminClick}
                       className={cn(
                         "inline-flex h-12 items-center gap-2 rounded-[18px] border px-4 text-sm font-medium shadow-sm transition",
                         location.pathname.startsWith("/admin")
