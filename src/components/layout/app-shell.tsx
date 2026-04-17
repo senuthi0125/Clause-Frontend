@@ -1,213 +1,295 @@
-import type { ReactNode } from "react";
-import { NavLink } from "react-router-dom";
-import { UserButton, useUser } from "@clerk/clerk-react";
+import { Link, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
 import {
+  Bell,
   CalendarDays,
-  ClipboardList,
+  CheckCheck,
   FileText,
-  GitBranch,
   LayoutDashboard,
+  Search,
+  Shield,
   ShieldAlert,
-  ShieldCheck,
-  SlidersHorizontal,
+  Sparkles,
   Users,
+  ScrollText,
+  LockKeyhole,
+  Workflow,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { UserButton, useUser } from "@clerk/clerk-react";
 import { cn } from "@/lib/utils";
 
-const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, href: "/" },
-  { label: "Contracts", icon: FileText, href: "/contracts" },
-  { label: "AI Analysis", icon: ShieldAlert, href: "/ai-analysis" },
-  { label: "Conflict Detection", icon: ShieldCheck, href: "/conflict-detection" },
-  { label: "Calendar", icon: CalendarDays, href: "/calendar" },
-  { label: "Workflows", icon: GitBranch, href: "/workflows" },
-];
-
-const adminNavItems = [
-  { label: "Admin Overview", icon: SlidersHorizontal, href: "/admin" },
-  { label: "User Management", icon: Users, href: "/admin/users" },
-  { label: "Audit Logs", icon: ClipboardList, href: "/admin/audit" },
-];
+type ContractGroup = {
+  name: string;
+  count: number;
+};
 
 type AppShellProps = {
   title: string;
   subtitle?: string;
-  actions?: ReactNode;
-  children: ReactNode;
-  contractGroups?: Array<{ name: string; count: number }>;
+  contractGroups?: ContractGroup[];
+  actions?: React.ReactNode;
+  children: React.ReactNode;
 };
+
+function getInitials(title?: string) {
+  if (!title) return "C";
+  return title.trim().charAt(0).toUpperCase() || "C";
+}
 
 export function AppShell({
   title,
   subtitle,
+  contractGroups = [],
   actions,
   children,
-  contractGroups = [],
 }: AppShellProps) {
+  const location = useLocation();
+  const { user } = useUser();
+  const [adminMode, setAdminMode] = useState(false);
+
+  const role = String(
+    user?.publicMetadata?.role || user?.unsafeMetadata?.role || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  const isAdmin = role === "admin";
+
+  useEffect(() => {
+    if (!isAdmin) {
+      localStorage.removeItem("admin_mode");
+      setAdminMode(false);
+      return;
+    }
+
+    const stored = localStorage.getItem("admin_mode");
+    if (stored === "true") {
+      setAdminMode(true);
+    }
+
+    if (location.pathname.startsWith("/admin")) {
+      localStorage.setItem("admin_mode", "true");
+      setAdminMode(true);
+    }
+  }, [isAdmin, location.pathname]);
+
+  const mainNavigation = [
+    {
+      label: "Dashboard",
+      href: "/",
+      icon: LayoutDashboard,
+    },
+    {
+      label: "Contracts",
+      href: "/contracts",
+      icon: FileText,
+    },
+    {
+      label: "AI Analysis",
+      href: "/ai-analysis",
+      icon: Sparkles,
+    },
+    {
+      label: "Conflict Detection",
+      href: "/conflict-detection",
+      icon: Shield,
+    },
+    {
+      label: "Calendar",
+      href: "/calendar",
+      icon: CalendarDays,
+    },
+    {
+      label: "Risk Analysis",
+      href: "/risk-analysis",
+      icon: ShieldAlert,
+    },
+  ];
+
+  const adminNavigation = [
+    {
+      label: "Admin Dashboard",
+      href: "/admin",
+      icon: LockKeyhole,
+    },
+    {
+      label: "User Management",
+      href: "/admin/users",
+      icon: Users,
+    },
+    {
+      label: "Workflows",
+      href: "/admin/workflows",
+      icon: Workflow,
+    },
+    {
+      label: "Approvals",
+      href: "/admin/approvals",
+      icon: CheckCheck,
+    },
+    {
+      label: "Audit Logs",
+      href: "/admin/audit",
+      icon: ScrollText,
+    },
+    {
+      label: "Notifications & Alerts",
+      href: "/admin/notifications",
+      icon: Bell,
+    },
+  ];
+
+  const showAdminSection = isAdmin && adminMode;
+
+  const handleAdminClick = () => {
+    localStorage.setItem("admin_mode", "true");
+    setAdminMode(true);
+  };
+
   return (
-    <div className="min-h-screen w-full bg-slate-100">
-      <div className="grid min-h-screen w-full grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="bg-slate-900 text-slate-100 lg:min-h-screen">
-          <div className="flex h-full flex-col">
-            <div className="border-b border-white/10 px-6 py-6">
-              <div className="flex items-center gap-3">
-                <div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-orange-400 via-blue-500 to-emerald-400 text-sm font-bold text-white">
-                  C
-                </div>
-                <div>
-                  <h1 className="text-2xl font-semibold tracking-tight">clause</h1>
-                  <p className="text-xs text-slate-400">
-                    Contract lifecycle workspace
-                  </p>
-                </div>
+    <div className="min-h-screen bg-slate-100">
+      <div className="flex min-h-screen">
+        <aside className="hidden w-[260px] shrink-0 bg-[#07153A] text-white lg:flex lg:flex-col">
+          <div className="border-b border-white/10 px-5 py-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-indigo-400 via-blue-500 to-cyan-400 text-lg font-semibold text-white">
+                {getInitials(title)}
+              </div>
+
+              <div className="min-w-0">
+                <p className="truncate text-[16px] font-semibold tracking-tight">
+                  clause
+                </p>
+                <p className="text-xs text-blue-100/80">
+                  Contract lifecycle workspace
+                </p>
               </div>
             </div>
-
-            <div className="px-4 py-4">
-              <nav className="space-y-1.5">
-                {navItems.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <NavLink
-                      key={item.label}
-                      to={item.href}
-                      end={item.href === "/"}
-                      className={({ isActive }) =>
-                        cn(
-                          "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm transition cursor-pointer",
-                          isActive
-                            ? "bg-white text-slate-900 shadow-sm"
-                            : "text-slate-300 hover:bg-white/5 hover:text-white"
-                        )
-                      }
-                    >
-                      <Icon className="h-4 w-4" />
-                      <span>{item.label}</span>
-                    </NavLink>
-                  );
-                })}
-              </nav>
-
-              <div className="mt-5 px-2 pb-2 text-xs uppercase tracking-[0.16em] text-slate-400">
-                Admin Controls
-              </div>
-              <nav className="space-y-1.5">
-                {adminNavItems.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <NavLink
-                      key={item.label}
-                      to={item.href}
-                      end={item.href === "/admin"}
-                      className={({ isActive }) =>
-                        cn(
-                          "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm transition cursor-pointer",
-                          isActive
-                            ? "bg-white text-slate-900 shadow-sm"
-                            : "text-slate-300 hover:bg-white/5 hover:text-white"
-                        )
-                      }
-                    >
-                      <Icon className="h-4 w-4" />
-                      <span>{item.label}</span>
-                    </NavLink>
-                  );
-                })}
-              </nav>
-            </div>
-
-            <div className="px-6 pt-2">
-              <div className="flex items-center justify-between text-xs uppercase tracking-[0.16em] text-slate-400">
-                <span>Live Contract Types</span>
-              </div>
-            </div>
-
-            <ScrollArea className="mt-3 flex-1 px-4">
-              <div className="space-y-2 pb-6">
-                {contractGroups.length === 0 ? (
-                  <div className="rounded-2xl bg-white/5 px-4 py-3 text-sm text-slate-400">
-                    No contract groups yet.
-                  </div>
-                ) : (
-                  contractGroups.map((item) => (
-                    <div
-                      key={item.name}
-                      className="flex items-center justify-between rounded-2xl bg-white/5 px-4 py-3"
-                    >
-                      <div>
-                        <p className="text-sm text-slate-100">{item.name}</p>
-                        <p className="text-xs text-slate-400">
-                          From backend data
-                        </p>
-                      </div>
-                      <Badge
-                        variant="secondary"
-                        className="rounded-full bg-white/10 text-slate-200 hover:bg-white/10"
-                      >
-                        {item.count}
-                      </Badge>
-                    </div>
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-
-            <UserCard />
           </div>
+
+          <nav className="overflow-y-auto px-3 py-4">
+            <div className="space-y-2">
+              {mainNavigation.map((item) => {
+                const isActive =
+                  item.href === "/"
+                    ? location.pathname === item.href
+                    : location.pathname.startsWith(item.href);
+
+                const Icon = item.icon;
+
+                return (
+                  <Link
+                    key={item.href}
+                    to={item.href}
+                    className={cn(
+                      "flex items-center gap-3 rounded-[20px] px-4 py-3 text-[14px] transition",
+                      isActive
+                        ? "bg-white text-slate-950 shadow-sm"
+                        : "text-blue-50 hover:bg-white/8"
+                    )}
+                  >
+                    <Icon className="h-[18px] w-[18px] shrink-0" />
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+
+            {showAdminSection ? (
+              <div className="mt-8">
+                <p className="px-3 text-[11px] uppercase tracking-[0.28em] text-blue-100/65">
+                  Admin
+                </p>
+
+                <div className="mt-3 space-y-2">
+                  {adminNavigation.map((item) => {
+                    const isActive = location.pathname.startsWith(item.href);
+                    const Icon = item.icon;
+
+                    return (
+                      <Link
+                        key={item.href}
+                        to={item.href}
+                        className={cn(
+                          "flex items-center gap-3 rounded-[20px] px-4 py-3 text-[14px] transition",
+                          isActive
+                            ? "bg-white text-slate-950 shadow-sm"
+                            : "text-blue-50 hover:bg-white/8"
+                        )}
+                      >
+                        <Icon className="h-[18px] w-[18px] shrink-0" />
+                        <span className="truncate">{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+          </nav>
         </aside>
 
-        <main className="min-w-0 bg-slate-100">
-          <div className="border-b border-slate-200 bg-white px-5 py-4 md:px-7">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="border-b border-slate-200 bg-white">
+            <div className="flex flex-col gap-4 px-6 py-5 xl:flex-row xl:items-start xl:justify-between">
+              <div className="min-w-0">
+                <p className="text-sm text-slate-500">Welcome back</p>
+                <h1 className="text-2xl font-semibold leading-tight tracking-tight text-slate-950 md:text-3xl">
                   {title}
-                </h2>
+                </h1>
                 {subtitle ? (
-                  <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+                  <p className="mt-2 max-w-2xl text-sm text-slate-500 md:text-base">
+                    {subtitle}
+                  </p>
                 ) : null}
               </div>
-              {actions ? (
-                <div className="flex flex-wrap items-center gap-2">{actions}</div>
-              ) : null}
+
+              <div className="flex flex-col items-stretch gap-3 xl:min-w-[720px] xl:flex-row xl:items-center xl:justify-end">
+                {actions ? (
+                  <div className="flex flex-wrap gap-2">{actions}</div>
+                ) : null}
+
+                <div className="flex items-center justify-end gap-3">
+                  <div className="hidden h-12 min-w-[420px] items-center gap-3 rounded-[18px] border border-slate-200 bg-white px-4 shadow-sm xl:flex">
+                    <Search className="h-4 w-4 text-slate-400" />
+                    <span className="text-sm text-slate-400">
+                      Search contracts, parties, clauses...
+                    </span>
+                  </div>
+
+                  {isAdmin ? (
+                    <Link
+                      to="/admin"
+                      onClick={handleAdminClick}
+                      className={cn(
+                        "inline-flex h-12 items-center gap-2 rounded-[18px] border px-4 text-sm font-medium shadow-sm transition",
+                        location.pathname.startsWith("/admin")
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      )}
+                    >
+                      <LockKeyhole className="h-4 w-4" />
+                      <span>Admin</span>
+                    </Link>
+                  ) : null}
+
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm">
+                    <UserButton
+                      afterSignOutUrl="/sign-in"
+                      appearance={{
+                        elements: {
+                          avatarBox: "h-8 w-8",
+                        },
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="px-5 py-5 md:px-7">{children}</div>
-        </main>
-      </div>
-    </div>
-  );
-}
+          </header>
 
-function UserCard() {
-  const { user, isLoaded } = useUser();
-  const displayName =
-    user?.fullName ||
-    user?.username ||
-    user?.primaryEmailAddress?.emailAddress ||
-    "Signed in";
-  const email = user?.primaryEmailAddress?.emailAddress ?? "";
-
-  return (
-    <div className="m-4 rounded-[24px] border border-slate-200 bg-white p-4 text-slate-900 shadow-sm">
-      <div className="flex items-center gap-3">
-        <UserButton
-          afterSignOutUrl="/sign-in"
-          appearance={{
-            elements: { avatarBox: "h-10 w-10" },
-          }}
-        />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">
-            {isLoaded ? displayName : "Loading..."}
-          </p>
-          {email ? (
-            <p className="truncate text-xs text-slate-500">{email}</p>
-          ) : (
-            <p className="text-xs text-slate-500">Click avatar to sign out</p>
-          )}
+          <main className="flex-1 bg-slate-100 px-5 py-5 md:px-6 md:py-6">
+            {children}
+          </main>
         </div>
       </div>
     </div>
