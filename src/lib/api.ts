@@ -239,6 +239,9 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  getAllWorkflows: () =>
+    request<{ workflows: Workflow[] }>("/api/workflows/list"),
+
   getWorkflow: (id: string) => request<Workflow>(`/api/workflows/${id}`),
 
   getContractWorkflows: (contractId: string) =>
@@ -342,14 +345,16 @@ export const api = {
       method: "PATCH",
     }),
 
-  listAuditLogs: (params: {
-    resource_type?: string;
-    resource_id?: string;
-    user_id?: string;
-    action?: string;
-    page?: number;
-    per_page?: number;
-  } = {}) => {
+  listAuditLogs: (
+    params: {
+      resource_type?: string;
+      resource_id?: string;
+      user_id?: string;
+      action?: string;
+      page?: number;
+      per_page?: number;
+    } = {}
+  ) => {
     const search = new URLSearchParams();
 
     Object.entries(params).forEach(([key, value]) => {

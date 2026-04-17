@@ -6,7 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
-import type { Approval, Contract, Workflow } from "@/types/api";
+import type { ApprovalListResponse, Contract, Workflow } from "@/types/api";
+
+type ApprovalItem =
+  ApprovalListResponse["approvals"] extends Array<infer T> ? T : never;
 
 function formatLabel(value?: string | null) {
   return (value || "-")
@@ -17,7 +20,7 @@ function formatLabel(value?: string | null) {
 }
 
 function badgeClass(value?: string | null) {
-  switch (value) {
+  switch ((value || "").toLowerCase()) {
     case "completed":
     case "approved":
       return "bg-green-100 text-green-700";
@@ -36,7 +39,7 @@ export default function WorkflowDetailPage() {
   const { id } = useParams();
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const [contract, setContract] = useState<Contract | null>(null);
-  const [approvals, setApprovals] = useState<Approval[]>([]);
+  const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -63,7 +66,7 @@ export default function WorkflowDetailPage() {
         const approvalsData = await api.getApprovalsByContract(
           workflowData.contract_id
         );
-        setApprovals(approvalsData.approvals || []);
+        setApprovals(Array.isArray(approvalsData.approvals) ? approvalsData.approvals : []);
       } catch {
         setApprovals([]);
       }
@@ -79,9 +82,7 @@ export default function WorkflowDetailPage() {
   }, [id]);
 
   const contractGroups = useMemo(() => {
-    return contract
-      ? [{ name: formatLabel(contract.contract_type), count: 1 }]
-      : [];
+    return contract ? [{ name: formatLabel(contract.contract_type), count: 1 }] : [];
   }, [contract]);
 
   const advance = async () => {
@@ -168,7 +169,7 @@ export default function WorkflowDetailPage() {
                           Type: {formatLabel(step.step_type)}
                         </p>
                         {step.comments ? (
-                          <p className="mt-1 text-sm text-slate-600">
+                          <p className="mt-2 text-sm text-slate-600">
                             {step.comments}
                           </p>
                         ) : null}
@@ -189,18 +190,19 @@ export default function WorkflowDetailPage() {
               <CardHeader>
                 <CardTitle>Workflow Actions</CardTitle>
               </CardHeader>
+
               <CardContent>
                 <textarea
-                  className="min-h-28 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none"
-                  placeholder="Add a comment for this step"
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
+                  placeholder="Add a comment for this step"
+                  className="min-h-36 w-full rounded-xl border border-slate-200 p-4 text-sm outline-none"
                 />
 
-                <div className="mt-4 flex gap-2">
+                <div className="mt-4 flex flex-wrap gap-3">
                   <Button onClick={advance} disabled={actionLoading}>
                     <CheckCircle2 className="mr-2 h-4 w-4" />
-                    {actionLoading ? "Processing..." : "Advance"}
+                    Advance
                   </Button>
 
                   <Button
@@ -209,7 +211,7 @@ export default function WorkflowDetailPage() {
                     disabled={actionLoading}
                   >
                     <XCircle className="mr-2 h-4 w-4" />
-                    {actionLoading ? "Processing..." : "Reject"}
+                    Reject
                   </Button>
                 </div>
               </CardContent>
@@ -219,38 +221,40 @@ export default function WorkflowDetailPage() {
               <CardHeader>
                 <CardTitle>Related Approvals</CardTitle>
               </CardHeader>
+
               <CardContent>
                 {approvals.length === 0 ? (
                   <p className="text-sm text-slate-500">
-                    No approvals linked to this contract yet.
+                    No related approvals found.
                   </p>
-                ) : null}
+                ) : (
+                  <div className="space-y-3">
+                    {approvals.map((approval) => (
+                      <div
+                        key={approval.id}
+                        className="rounded-xl border border-slate-200 p-4"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-medium text-slate-900">
+                              {formatLabel(approval.approval_type)}
+                            </p>
+                            <p className="mt-2 text-sm text-slate-500">
+                              Approvers:{" "}
+                              {approval.approvers
+                                ?.map((item) => item.user_id)
+                                .join(", ") || "—"}
+                            </p>
+                          </div>
 
-                <div className="space-y-3">
-                  {approvals.map((approval) => (
-                    <div
-                      key={approval.id}
-                      className="rounded-xl border border-slate-200 p-4 text-sm"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="font-medium text-slate-900">
-                          {formatLabel(approval.approval_type)}
-                        </span>
-
-                        <Badge className={badgeClass(approval.status)}>
-                          {formatLabel(approval.status)}
-                        </Badge>
+                          <Badge className={badgeClass(approval.status)}>
+                            {formatLabel(approval.status)}
+                          </Badge>
+                        </div>
                       </div>
-
-                      <p className="mt-2 text-slate-500">
-                        Approvers:{" "}
-                        {approval.approvers?.length
-                          ? approval.approvers.map((person) => person.user_id).join(", ")
-                          : "No approvers"}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

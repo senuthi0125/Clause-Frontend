@@ -13,6 +13,7 @@ import {
   Users,
   ScrollText,
   LockKeyhole,
+  Workflow,
 } from "lucide-react";
 import { UserButton, useUser } from "@clerk/clerk-react";
 import { cn } from "@/lib/utils";
@@ -117,6 +118,11 @@ export function AppShell({
       icon: Users,
     },
     {
+      label: "Workflows",
+      href: "/admin/workflows",
+      icon: Workflow,
+    },
+    {
       label: "Approvals",
       href: "/admin/approvals",
       icon: CheckCheck,
@@ -219,42 +225,6 @@ export function AppShell({
                 </div>
               </div>
             ) : null}
-
-            <div className="mt-10">
-              <p className="px-3 text-[11px] uppercase tracking-[0.28em] text-blue-100/65">
-                Live Contract Types
-              </p>
-
-              <div className="mt-4 space-y-3">
-                {contractGroups.length > 0 ? (
-                  contractGroups.map((group) => (
-                    <div
-                      key={group.name}
-                      className="rounded-[20px] bg-white/8 px-4 py-3"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-[14px] font-medium text-white">
-                            {group.name}
-                          </p>
-                          <p className="text-xs text-blue-100/75">
-                            From backend data
-                          </p>
-                        </div>
-
-                        <div className="flex h-7 min-w-7 items-center justify-center rounded-full bg-white/10 px-2 text-xs text-white">
-                          {group.count}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="rounded-[20px] bg-white/8 px-4 py-3 text-xs text-blue-100/75">
-                    No contract groups available
-                  </div>
-                )}
-              </div>
-            </div>
           </nav>
         </aside>
 
@@ -274,7 +244,9 @@ export function AppShell({
               </div>
 
               <div className="flex flex-col items-stretch gap-3 xl:min-w-[720px] xl:flex-row xl:items-center xl:justify-end">
-                {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
+                {actions ? (
+                  <div className="flex flex-wrap gap-2">{actions}</div>
+                ) : null}
 
                 <div className="flex items-center justify-end gap-3">
                   <div className="hidden h-12 min-w-[420px] items-center gap-3 rounded-[18px] border border-slate-200 bg-white px-4 shadow-sm xl:flex">
