@@ -11,7 +11,6 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
-import { ShieldAlert } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
