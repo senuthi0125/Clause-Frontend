@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Search, Trash2, Upload, Loader2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
+import { useUser } from "@clerk/clerk-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +9,57 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api, buildContractsQuery } from "@/lib/api";
 import type { Contract, ContractsResponse } from "@/types/api";
+
+// Ordered pipeline stages — used to build the progress tracker
+const WORKFLOW_STAGES = [
+  "request",
+  "authoring",
+  "review",
+  "approval",
+  "execution",
+  "storage",
+  "monitoring",
+  "renewal",
+] as const;
+
+function WorkflowProgressBar({ stage }: { stage?: string | null }) {
+  const current = WORKFLOW_STAGES.indexOf(
+    (stage ?? "request") as (typeof WORKFLOW_STAGES)[number]
+  );
+  const activeIdx = current < 0 ? 0 : current;
+
+  return (
+    <div className="mt-3">
+      <p className="mb-1.5 text-xs font-medium text-slate-500 uppercase tracking-wide">
+        Document Stage
+      </p>
+      <div className="flex items-center gap-0.5">
+        {WORKFLOW_STAGES.map((s, i) => {
+          const isDone = i < activeIdx;
+          const isCurrent = i === activeIdx;
+          return (
+            <div key={s} className="flex flex-1 flex-col items-center gap-1">
+              <div
+                className={`h-1.5 w-full rounded-full transition-all ${
+                  isDone
+                    ? "bg-green-500"
+                    : isCurrent
+                    ? "bg-violet-500"
+                    : "bg-slate-200"
+                }`}
+              />
+              {isCurrent && (
+                <span className="text-[10px] font-medium text-violet-600 whitespace-nowrap">
+                  {formatLabel(s)}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function formatLabel(value?: string | null) {
   return (value || "-")
@@ -67,6 +119,12 @@ function badgeClass(value?: string | null) {
 export default function ContractsPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const { user } = useUser();
+
+  const role = String(
+    user?.publicMetadata?.role || user?.unsafeMetadata?.role || ""
+  ).trim().toLowerCase();
+  const isAdminOrManager = role === "admin" || role === "manager";
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -160,7 +218,11 @@ export default function ContractsPage() {
   return (
     <AppShell
       title="Contracts"
-      subtitle="Browse live contracts from the backend and open detailed views."
+      subtitle={
+        isAdminOrManager
+          ? "All contracts across all users — manage, review, and advance workflows."
+          : "Your uploaded contracts — track each document's approval stage below."
+      }
       contractGroups={contractGroups}
     >
       <input
@@ -300,11 +362,24 @@ export default function ContractsPage() {
                 </div>
               </div>
 
+              {/* Workflow progress bar — always visible so users know their document stage */}
+              <WorkflowProgressBar stage={contract.workflow_stage} />
+
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-                <div className="text-sm text-slate-500">
-                  Parties:{" "}
-                  {contract.parties?.map((party) => party.name).join(", ") ||
-                    "No parties added"}
+                <div className="flex flex-col gap-1">
+                  <div className="text-sm text-slate-500">
+                    Parties:{" "}
+                    {contract.parties?.map((party) => party.name).join(", ") ||
+                      "No parties added"}
+                  </div>
+                  {isAdminOrManager && contract.created_by && (
+                    <div className="text-xs text-slate-400">
+                      Uploaded by:{" "}
+                      <span className="font-medium text-slate-600">
+                        {contract.created_by}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div
@@ -314,7 +389,7 @@ export default function ContractsPage() {
                   {contract.workflow_id ? (
                     <Button variant="outline" asChild className="rounded-xl">
                       <Link to={`/workflows/${contract.workflow_id}`}>
-                        Open workflow
+                        {isAdminOrManager ? "Manage workflow" : "Track progress"}
                       </Link>
                     </Button>
                   ) : null}
@@ -323,14 +398,16 @@ export default function ContractsPage() {
                     <Link to="/conflict-detection">Compare</Link>
                   </Button>
 
-                  <Button
-                    variant="destructive"
-                    onClick={() => deleteContract(contract.id)}
-                    className="rounded-xl"
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
-                  </Button>
+                  {isAdminOrManager && (
+                    <Button
+                      variant="destructive"
+                      onClick={() => deleteContract(contract.id)}
+                      className="rounded-xl"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete
+                    </Button>
+                  )}
                 </div>
               </div>
             </CardContent>

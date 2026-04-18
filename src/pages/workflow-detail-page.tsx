@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { CheckCircle2, XCircle } from "lucide-react";
+import { useUser } from "@clerk/clerk-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,6 +38,13 @@ function badgeClass(value?: string | null) {
 
 export default function WorkflowDetailPage() {
   const { id } = useParams();
+  const { user } = useUser();
+
+  const role = String(
+    user?.publicMetadata?.role || user?.unsafeMetadata?.role || ""
+  ).trim().toLowerCase();
+  const canManage = role === "admin" || role === "manager";
+
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const [contract, setContract] = useState<Contract | null>(null);
   const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
@@ -186,36 +194,57 @@ export default function WorkflowDetailPage() {
           </Card>
 
           <div className="space-y-5">
-            <Card className="border border-slate-200 bg-white shadow-sm">
-              <CardHeader>
-                <CardTitle>Workflow Actions</CardTitle>
-              </CardHeader>
+            {canManage ? (
+              <Card className="border border-slate-200 bg-white shadow-sm">
+                <CardHeader>
+                  <CardTitle>Workflow Actions</CardTitle>
+                </CardHeader>
 
-              <CardContent>
-                <textarea
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Add a comment for this step"
-                  className="min-h-36 w-full rounded-xl border border-slate-200 p-4 text-sm outline-none"
-                />
+                <CardContent>
+                  <textarea
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="Add a comment for this step"
+                    className="min-h-36 w-full rounded-xl border border-slate-200 p-4 text-sm outline-none"
+                  />
 
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <Button onClick={advance} disabled={actionLoading}>
-                    <CheckCircle2 className="mr-2 h-4 w-4" />
-                    Advance
-                  </Button>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <Button onClick={advance} disabled={actionLoading}>
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
+                      Advance
+                    </Button>
 
-                  <Button
-                    variant="destructive"
-                    onClick={reject}
-                    disabled={actionLoading}
-                  >
-                    <XCircle className="mr-2 h-4 w-4" />
-                    Reject
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                    <Button
+                      variant="destructive"
+                      onClick={reject}
+                      disabled={actionLoading}
+                    >
+                      <XCircle className="mr-2 h-4 w-4" />
+                      Reject
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="border border-slate-200 bg-white shadow-sm">
+                <CardHeader>
+                  <CardTitle>Workflow Status</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-slate-500">
+                    Your document is currently at step{" "}
+                    <span className="font-medium text-slate-900">
+                      {workflow?.current_step ?? "—"}
+                    </span>{" "}
+                    of{" "}
+                    <span className="font-medium text-slate-900">
+                      {workflow?.steps?.length ?? "—"}
+                    </span>
+                    . An admin or manager will review and advance the workflow.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
             <Card className="border border-slate-200 bg-white shadow-sm">
               <CardHeader>

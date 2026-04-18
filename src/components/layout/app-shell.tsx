@@ -54,9 +54,11 @@ export function AppShell({
     .toLowerCase();
 
   const isAdmin = role === "admin";
+  const isManager = role === "manager";
+  const isAdminOrManager = isAdmin || isManager;
 
   useEffect(() => {
-    if (!isAdmin) {
+    if (!isAdminOrManager) {
       localStorage.removeItem("admin_mode");
       setAdminMode(false);
       return;
@@ -71,7 +73,7 @@ export function AppShell({
       localStorage.setItem("admin_mode", "true");
       setAdminMode(true);
     }
-  }, [isAdmin, location.pathname]);
+  }, [isAdminOrManager, location.pathname]);
 
   const mainNavigation = [
     {
@@ -106,40 +108,24 @@ export function AppShell({
     },
   ];
 
+  // Full admin nav — visible to admins only
   const adminNavigation = [
-    {
-      label: "Admin Dashboard",
-      href: "/admin",
-      icon: LockKeyhole,
-    },
-    {
-      label: "User Management",
-      href: "/admin/users",
-      icon: Users,
-    },
-    {
-      label: "Workflows",
-      href: "/admin/workflows",
-      icon: Workflow,
-    },
-    {
-      label: "Approvals",
-      href: "/admin/approvals",
-      icon: CheckCheck,
-    },
-    {
-      label: "Audit Logs",
-      href: "/admin/audit",
-      icon: ScrollText,
-    },
-    {
-      label: "Notifications & Alerts",
-      href: "/admin/notifications",
-      icon: Bell,
-    },
+    { label: "Admin Dashboard", href: "/admin", icon: LockKeyhole },
+    { label: "User Management", href: "/admin/users", icon: Users },
+    { label: "Workflows", href: "/admin/workflows", icon: Workflow },
+    { label: "Approvals", href: "/admin/approvals", icon: CheckCheck },
+    { label: "Audit Logs", href: "/admin/audit", icon: ScrollText },
+    { label: "Notifications & Alerts", href: "/admin/notifications", icon: Bell },
   ];
 
-  const showAdminSection = isAdmin && adminMode;
+  // Reduced nav for managers — workflow & approval management only
+  const managerNavigation = [
+    { label: "Workflows", href: "/admin/workflows", icon: Workflow },
+    { label: "Approvals", href: "/admin/approvals", icon: CheckCheck },
+  ];
+
+  const showAdminSection = isAdminOrManager && adminMode;
+  const activeNavigation = isAdmin ? adminNavigation : managerNavigation;
 
   const handleAdminClick = () => {
     localStorage.setItem("admin_mode", "true");
@@ -198,11 +184,11 @@ export function AppShell({
             {showAdminSection ? (
               <div className="mt-8">
                 <p className="px-3 text-[11px] uppercase tracking-[0.28em] text-blue-100/65">
-                  Admin
+                  {isAdmin ? "Admin" : "Management"}
                 </p>
 
                 <div className="mt-3 space-y-2">
-                  {adminNavigation.map((item) => {
+                  {activeNavigation.map((item) => {
                     const isActive = location.pathname.startsWith(item.href);
                     const Icon = item.icon;
 
@@ -256,9 +242,9 @@ export function AppShell({
                     </span>
                   </div>
 
-                  {isAdmin ? (
+                  {isAdminOrManager ? (
                     <Link
-                      to="/admin"
+                      to={isAdmin ? "/admin" : "/admin/workflows"}
                       onClick={handleAdminClick}
                       className={cn(
                         "inline-flex h-12 items-center gap-2 rounded-[18px] border px-4 text-sm font-medium shadow-sm transition",
@@ -268,7 +254,7 @@ export function AppShell({
                       )}
                     >
                       <LockKeyhole className="h-4 w-4" />
-                      <span>Admin</span>
+                      <span>{isAdmin ? "Admin" : "Manage"}</span>
                     </Link>
                   ) : null}
 
