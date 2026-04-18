@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, UserX } from "lucide-react";
+import { Search, UserX, UserCheck, User } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,8 +9,10 @@ import type { Contract, UserRole } from "@/types/api";
 
 type UserRow = {
   id: string;
+  clerk_id?: string;
   email?: string;
   full_name?: string;
+  image_url?: string;
   role?: UserRole;
   status?: string;
   company?: string;
@@ -153,14 +155,24 @@ export default function AdminUsersPage() {
   const deactivate = async (userId: string) => {
     setBusyUserId(userId);
     setError(null);
-
     try {
       await api.deactivateUser(userId);
       await loadData();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to deactivate user."
-      );
+      setError(err instanceof Error ? err.message : "Failed to deactivate user.");
+    } finally {
+      setBusyUserId(null);
+    }
+  };
+
+  const activate = async (userId: string) => {
+    setBusyUserId(userId);
+    setError(null);
+    try {
+      await api.activateUser(userId);
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to activate user.");
     } finally {
       setBusyUserId(null);
     }
@@ -203,92 +215,124 @@ export default function AdminUsersPage() {
               <table className="w-full min-w-[980px] border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 text-left">
-                    <th className="pb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
+                    <th colSpan={2} className="pb-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
                       User
                     </th>
-                    <th className="pb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
-                      Email
-                    </th>
-                    <th className="pb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
+                    <th className="pb-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
                       Role
                     </th>
-                    <th className="pb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
+                    <th className="pb-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
                       Status
                     </th>
-                    <th className="pb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
+                    <th className="pb-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
                       Joined
                     </th>
-                    <th className="pb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
+                    <th className="pb-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
                       Actions
                     </th>
                   </tr>
                 </thead>
 
                 <tbody>
-                  {filteredUsers.map((user) => (
+                  {filteredUsers.map((user) => {
+                    const initials = (user.full_name || user.email || "?")
+                      .split(" ")
+                      .slice(0, 2)
+                      .map((p) => p[0]?.toUpperCase() ?? "")
+                      .join("");
+
+                    return (
                     <tr
                       key={user.id}
-                      className="border-b border-slate-200 last:border-b-0"
+                      className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/60 transition-colors"
                     >
-                      <td className="py-5">
-                        <div>
-                          <p className="font-medium text-slate-950">
-                            {user.full_name || "Unnamed user"}
-                          </p>
-                          <p className="text-sm text-slate-500">
-                            {user.company || ""}
-                          </p>
+                      {/* Identity: avatar + name + email */}
+                      <td className="py-4 pr-4" colSpan={2}>
+                        <div className="flex items-center gap-3">
+                          {/* Avatar */}
+                          {user.image_url ? (
+                            <img
+                              src={user.image_url}
+                              alt={user.full_name || "avatar"}
+                              className="h-9 w-9 rounded-full object-cover ring-2 ring-slate-100 shrink-0"
+                            />
+                          ) : (
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-100 text-sm font-semibold text-violet-700 ring-2 ring-slate-100">
+                              {initials || <User className="h-4 w-4" />}
+                            </div>
+                          )}
+                          {/* Name + email stacked */}
+                          <div className="min-w-0">
+                            <p className="font-semibold text-slate-900 truncate">
+                              {user.full_name || <span className="italic text-slate-400 font-normal">No name</span>}
+                            </p>
+                            <p className="text-sm text-slate-500 truncate">
+                              {user.email || "—"}
+                            </p>
+                          </div>
                         </div>
                       </td>
 
-                      <td className="py-5 text-slate-700">
-                        {user.email || "—"}
-                      </td>
-
-                      <td className="py-5">
-                        <Badge className={roleBadgeClass(user.role)}>
+                      <td className="py-4 pr-4">
+                        <Badge className={`${roleBadgeClass(user.role)} capitalize`}>
                           {user.role || "user"}
                         </Badge>
                       </td>
 
-                      <td className="py-5">
+                      <td className="py-4 pr-4">
                         <Badge className={statusBadgeClass(user.status)}>
-                          {user.status || "unknown"}
+                          {formatLabel(user.status) || "Unknown"}
                         </Badge>
                       </td>
 
-                      <td className="py-5 text-slate-700">
+                      <td className="py-4 pr-4 text-sm text-slate-600">
                         {formatDate(user.created_at)}
                       </td>
 
-                      <td className="py-5">
-                        <div className="flex items-center gap-3">
+                      <td className="py-4">
+                        <div className="flex items-center gap-2">
                           <select
                             value={user.role || "user"}
                             onChange={(e) =>
                               changeRole(user.id, e.target.value as UserRole)
                             }
                             disabled={busyUserId === user.id}
-                            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none"
+                            className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-violet-400 disabled:opacity-50"
                           >
-                            <option value="user">user</option>
-                            <option value="viewer">viewer</option>
-                            <option value="manager">manager</option>
-                            <option value="admin">admin</option>
+                            <option value="user">User</option>
+                            <option value="viewer">Viewer</option>
+                            <option value="manager">Manager</option>
+                            <option value="admin">Admin</option>
                           </select>
 
-                          <Button
-                            variant="outline"
-                            onClick={() => deactivate(user.id)}
-                            disabled={busyUserId === user.id}
-                          >
-                            <UserX className="mr-2 h-4 w-4" />
-                            Deactivate
-                          </Button>
+                          {(user.status || "active").toLowerCase() === "inactive" ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => activate(user.id)}
+                              disabled={busyUserId === user.id}
+                              className="rounded-xl text-green-700 border-green-200 hover:bg-green-50"
+                            >
+                              <UserCheck className="mr-1.5 h-3.5 w-3.5" />
+                              Activate
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => deactivate(user.id)}
+                              disabled={busyUserId === user.id}
+                              className="rounded-xl text-red-600 border-red-200 hover:bg-red-50"
+                            >
+                              <UserX className="mr-1.5 h-3.5 w-3.5" />
+                              Deactivate
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
 
                   {filteredUsers.length === 0 && (
                     <tr>

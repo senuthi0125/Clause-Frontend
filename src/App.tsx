@@ -22,6 +22,7 @@ import AdminApprovalsPage from "./pages/admin-approvals-page";
 import AdminNotificationsPage from "./pages/admin-notifications-page";
 import WorkflowsPage from "./pages/workflows-page";
 import WorkflowDetailPage from "./pages/workflow-detail-page";
+import UploadPipelinePage from "./pages/upload-pipeline-page";
 import { AuthBridge } from "./components/auth-bridge";
 
 function AuthLayout({ children }: { children: React.ReactNode }) {
@@ -73,6 +74,7 @@ export default function App() {
                 <Routes>
                   <Route path="/" element={<DashboardPage />} />
                   <Route path="/contracts" element={<ContractsPage />} />
+                  <Route path="/upload" element={<UploadPipelinePage />} />
                   <Route
                     path="/contracts/new"
                     element={<ContractTemplatePage />}

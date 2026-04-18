@@ -1,450 +1,881 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
+  Bot,
   CalendarDays,
+  CheckCircle2,
   CircleDollarSign,
+  Download,
+  Edit3,
+  Eye,
   FileText,
+  Loader2,
+  Save,
+  Send,
   ShieldCheck,
   Tag,
   Trash2,
   Workflow,
-  Bot,
+  X,
+  XCircle,
+  ThumbsUp,
+  ThumbsDown,
+  RotateCcw,
+  Clock,
+  ChevronRight,
 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { useUser } from "@clerk/clerk-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { api } from "@/lib/api";
-import type { Contract, Workflow as WorkflowType } from "@/types/api";
+import { api, API_BASE_URL } from "@/lib/api";
+import type { Contract, Workflow as WorkflowType, Approval } from "@/types/api";
 
-function formatLabel(value?: string | null) {
-  return (value || "-")
-    .replace(/_/g, " ")
-    .split(" ")
-    .map((part) => (part ? part[0].toUpperCase() + part.slice(1) : part))
-    .join(" ");
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
+function fmt(v?: string | null) {
+  return (v || "—").replace(/_/g, " ").split(" ")
+    .map((p) => (p ? p[0].toUpperCase() + p.slice(1) : p)).join(" ");
 }
-
-function formatDate(value?: string | null) {
-  if (!value) return "—";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+function fmtDate(v?: string | null) {
+  if (!v) return "—";
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? "—"
+    : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
-
-function formatCurrency(value?: number | null) {
-  if (value == null) return "—";
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
+function fmtCurrency(v?: number | null) {
+  if (v == null) return "—";
+  return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(v);
 }
-
-function badgeClass(value?: string | null) {
-  switch ((value || "").toLowerCase()) {
-    case "high":
-      return "bg-red-100 text-red-700";
-    case "medium":
-      return "bg-amber-100 text-amber-700";
+function badgeClass(v?: string | null) {
+  switch ((v || "").toLowerCase()) {
+    case "high":      return "bg-red-100 text-red-700";
+    case "medium":    return "bg-amber-100 text-amber-700";
     case "low":
-      return "bg-green-100 text-green-700";
     case "active":
-      return "bg-green-100 text-green-700";
+    case "approved":  return "bg-green-100 text-green-700";
     case "draft":
-      return "bg-slate-100 text-slate-700";
-    case "review":
-    case "approval":
-    case "authoring":
-    case "execution":
-    case "monitoring":
-    case "request":
-    case "storage":
-      return "bg-violet-100 text-violet-700";
-    default:
-      return "bg-slate-100 text-slate-700";
+    case "pending":   return "bg-slate-100 text-slate-600";
+    case "rejected":  return "bg-red-100 text-red-700";
+    case "changes_requested": return "bg-amber-100 text-amber-700";
+    case "review": case "approval": case "authoring":
+    case "execution": case "monitoring": case "request":
+    case "storage":   return "bg-violet-100 text-violet-700";
+    default:          return "bg-slate-100 text-slate-600";
   }
 }
+
+// ─── Workflow step names (matches DEFAULT_WORKFLOW_STEPS on the backend) ──────
+const STEP_LABELS: Record<number, string> = {
+  1: "Request & Initiation",
+  2: "Authoring & Drafting",
+  3: "AI Risk Analysis",
+  4: "Review & Negotiation",
+  5: "Approval",
+  6: "Execution & Signing",
+  7: "Storage & Repository",
+  8: "Monitoring & Obligations",
+  9: "Renewal / Expiration",
+};
+
+// ─── Document viewer / editor ─────────────────────────────────────────────────
+
+type ViewMode = "preview" | "edit";
+
+function DocumentPanel({ contractId }: { contractId: string }) {
+  const [mode, setMode]         = useState<ViewMode>("preview");
+  const [fileType, setFileType] = useState("");
+  const [hasFile, setHasFile]   = useState(false);
+  const [text, setText]         = useState("");
+  const [editText, setEditText] = useState("");
+  const [docxHtml, setDocxHtml] = useState("");
+  const [loading, setLoading]   = useState(true);
+  const [saving, setSaving]     = useState(false);
+  const [saveMsg, setSaveMsg]   = useState<string | null>(null);
+  const [docxLoading, setDocxLoading] = useState(false);
+  const viewUrl = `${API_BASE_URL}/api/documents/view/${contractId}`;
+  const isPdf  = fileType === ".pdf";
+  const isDocx = fileType === ".docx" || fileType === ".doc";
+  const isTxt  = fileType === ".txt" || fileType === ".rtf" || fileType === ".odt";
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    api.getDocumentText(contractId)
+      .then((r) => { if (!cancelled) { setFileType(r.file_type || ""); setHasFile(r.has_file); setText(r.text || ""); setEditText(r.text || ""); }})
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [contractId]);
+
+  const loadDocxHtml = useCallback(async () => {
+    if (!isDocx || docxHtml || docxLoading) return;
+    setDocxLoading(true);
+    try {
+      const resp = await fetch(viewUrl);
+      const buf  = await resp.arrayBuffer();
+      const mammoth = await import("mammoth");
+      const result  = await mammoth.convertToHtml({ arrayBuffer: buf });
+      setDocxHtml(result.value);
+    } catch { setDocxHtml("<p style='color:#888'>Could not render DOCX — download to view.</p>"); }
+    finally { setDocxLoading(false); }
+  }, [isDocx, docxHtml, docxLoading, viewUrl]);
+
+  useEffect(() => { if (isDocx && mode === "preview") loadDocxHtml(); }, [isDocx, mode, loadDocxHtml]);
+
+  async function handleSave() {
+    if (!editText.trim()) return;
+    setSaving(true); setSaveMsg(null);
+    try {
+      await api.saveDocumentText(contractId, editText);
+      setText(editText);
+      setSaveMsg("✓ Saved");
+      setTimeout(() => setSaveMsg(null), 3000);
+    } catch { setSaveMsg("✗ Save failed — try again"); }
+    finally { setSaving(false); }
+  }
+
+  // ── Reliable download: programmatic anchor element ──────────────────────
+  function handleDownload() {
+    const a = document.createElement("a");
+    a.href = `${API_BASE_URL}/api/documents/download/${contractId}`;
+    a.setAttribute("download", "");
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  if (loading) return (
+    <div className="flex items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white py-16">
+      <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+      <span className="text-sm text-slate-500">Loading document…</span>
+    </div>
+  );
+
+  if (!hasFile) return (
+    <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50 py-14 text-center">
+      <FileText className="h-10 w-10 text-slate-300" />
+      <p className="font-medium text-slate-600">No document file attached yet</p>
+      <p className="text-sm text-slate-400">
+        Upload a file via the{" "}
+        <Link to="/upload" className="text-blue-500 underline hover:text-blue-600">
+          Upload Pipeline
+        </Link>{" "}
+        to view it here
+      </p>
+    </div>
+  );
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-5 py-3">
+        <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1">
+          {(["preview", "edit"] as ViewMode[]).map((m) => (
+            <button key={m} onClick={() => setMode(m)}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                mode === m ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              {m === "preview" ? <Eye className="h-3.5 w-3.5" /> : <Edit3 className="h-3.5 w-3.5" />}
+              {m === "preview" ? "Preview" : "Edit"}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          {saveMsg && (
+            <span className={`text-xs font-medium ${saveMsg.startsWith("✓") ? "text-green-600" : "text-red-600"}`}>
+              {saveMsg}
+            </span>
+          )}
+          {mode === "edit" && (
+            <Button size="sm" onClick={handleSave} disabled={saving} className="rounded-xl">
+              {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
+          )}
+          <Button size="sm" variant="outline" onClick={handleDownload} className="rounded-xl">
+            <Download className="mr-1.5 h-3.5 w-3.5" /> Download
+          </Button>
+          <Badge className="rounded-lg bg-slate-100 px-2 py-1 text-[11px] uppercase tracking-wide text-slate-600">
+            {fileType || "file"}
+          </Badge>
+        </div>
+      </div>
+
+      {/* Content */}
+      {mode === "preview" ? (
+        <>
+          {isPdf && <iframe src={viewUrl} title="Contract document" className="w-full" style={{ height: "72vh", border: "none" }} />}
+          {isDocx && (
+            <div className="prose prose-slate max-w-none overflow-auto px-10 py-8" style={{ minHeight: "60vh", maxHeight: "72vh" }}>
+              {docxLoading
+                ? <div className="flex items-center gap-2 py-10 text-slate-500"><Loader2 className="h-5 w-5 animate-spin" /> Rendering…</div>
+                : <div dangerouslySetInnerHTML={{ __html: docxHtml || "<p>No content.</p>" }} />
+              }
+            </div>
+          )}
+          {isTxt && (
+            <pre className="overflow-auto whitespace-pre-wrap break-words px-10 py-8 font-mono text-sm text-slate-800" style={{ minHeight: "50vh", maxHeight: "72vh" }}>
+              {text || <span className="italic text-slate-400">No text extracted.</span>}
+            </pre>
+          )}
+          {!isPdf && !isDocx && !isTxt && (
+            <div className="flex flex-col items-center gap-3 py-14 text-center">
+              <FileText className="h-10 w-10 text-slate-300" />
+              <p className="text-sm text-slate-500">Preview not supported for this file type.</p>
+              <Button variant="outline" className="rounded-xl" onClick={handleDownload}>
+                <Download className="mr-2 h-4 w-4" /> Download to view
+              </Button>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="relative">
+          <textarea
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            spellCheck
+            className="w-full resize-none bg-white px-10 py-8 font-mono text-sm text-slate-800 outline-none"
+            style={{ minHeight: "72vh" }}
+            placeholder="Start typing your contract content here…"
+          />
+          {editText !== text && (
+            <div className="absolute bottom-4 right-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 shadow-sm">
+              <span className="text-xs text-slate-500">Unsaved changes</span>
+              <button onClick={() => setEditText(text)} className="text-slate-400 hover:text-slate-600" title="Discard">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Send for Approval panel ─────────────────────────────────────────────────
+
+function SendApprovalPanel({
+  contractId,
+  workflowId,
+  onDone,
+  onClose,
+}: {
+  contractId: string;
+  workflowId?: string;
+  onDone: () => void;
+  onClose: () => void;
+}) {
+  const [approvalType, setApprovalType] = useState("all_required");
+  const [approverInput, setApproverInput] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit() {
+    setSubmitting(true); setError(null);
+    const ids = approverInput.split(",").map((s) => s.trim()).filter(Boolean);
+    try {
+      await api.createApproval({
+        contract_id: contractId,
+        workflow_id: workflowId,
+        approval_type: approvalType,
+        approver_ids: ids,
+      });
+      onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create approval.");
+    } finally { setSubmitting(false); }
+  }
+
+  return (
+    <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="font-semibold text-blue-900 flex items-center gap-2">
+          <Send className="h-4 w-4" /> Send for Approval
+        </p>
+        <button onClick={onClose} className="text-blue-400 hover:text-blue-600"><X className="h-4 w-4" /></button>
+      </div>
+
+      {error && <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      <div className="space-y-3">
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Approval Type
+          </label>
+          <select
+            value={approvalType}
+            onChange={(e) => setApprovalType(e.target.value)}
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400"
+          >
+            <option value="all_required">All Required — everyone must approve</option>
+            <option value="majority">Majority — more than half must approve</option>
+            <option value="first_person">First Person — first vote decides</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Approver User IDs <span className="font-normal normal-case text-slate-400">(comma-separated, optional)</span>
+          </label>
+          <input
+            type="text"
+            value={approverInput}
+            onChange={(e) => setApproverInput(e.target.value)}
+            placeholder="user_abc123, user_def456 — leave blank for admin to decide"
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400"
+          />
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" size="sm" className="rounded-xl" onClick={onClose}>Cancel</Button>
+        <Button size="sm" className="rounded-xl" onClick={handleSubmit} disabled={submitting}>
+          {submitting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
+          {submitting ? "Submitting…" : "Submit for Approval"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Workflow status card ─────────────────────────────────────────────────────
+
+function WorkflowCard({
+  workflows,
+  contractId,
+  onWorkflowCreated,
+}: {
+  workflows: WorkflowType[];
+  contractId: string;
+  onWorkflowCreated: () => void;
+}) {
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const latest = workflows[0] ?? null;
+
+  async function startWorkflow() {
+    setCreating(true); setError(null);
+    try {
+      await api.createWorkflow({ contract_id: contractId, name: "Contract Review Workflow" });
+      onWorkflowCreated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start workflow.");
+    } finally { setCreating(false); }
+  }
+
+  return (
+    <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Workflow className="h-5 w-5 text-slate-500" /> Workflow
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {error && <p className="text-xs text-red-600">{error}</p>}
+
+        {!latest ? (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-500">No workflow started yet.</p>
+            <Button size="sm" variant="outline" className="w-full rounded-xl" onClick={startWorkflow} disabled={creating}>
+              {creating ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Workflow className="mr-2 h-3.5 w-3.5" />}
+              {creating ? "Starting…" : "Start Workflow"}
+            </Button>
+          </div>
+        ) : (
+          <>
+            {/* Status + step indicator */}
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-800">{latest.name || "Review Workflow"}</p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Step {latest.current_step} of {latest.steps?.length ?? 9}
+                </p>
+              </div>
+              <Badge className={badgeClass(latest.status)}>{fmt(latest.status)}</Badge>
+            </div>
+
+            {/* Current step name */}
+            <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+              <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Current Step</p>
+              <p className="mt-0.5 text-sm font-semibold text-slate-800">
+                {STEP_LABELS[latest.current_step] ?? `Step ${latest.current_step}`}
+              </p>
+            </div>
+
+            {/* Mini step progress dots */}
+            <div className="flex items-center gap-1">
+              {Array.from({ length: latest.steps?.length ?? 9 }, (_, i) => {
+                const stepNum = i + 1;
+                const stepData = latest.steps?.find((s) => s.step_number === stepNum);
+                const isDone    = stepData?.status === "completed";
+                const isCurrent = stepNum === latest.current_step;
+                const isRejected = stepData?.status === "rejected";
+                return (
+                  <div
+                    key={stepNum}
+                    title={STEP_LABELS[stepNum] ?? `Step ${stepNum}`}
+                    className={`h-2 flex-1 rounded-full transition-all ${
+                      isRejected ? "bg-red-400"
+                      : isDone    ? "bg-green-500"
+                      : isCurrent ? "bg-blue-500"
+                      : "bg-slate-200"
+                    }`}
+                  />
+                );
+              })}
+            </div>
+            <p className="text-right text-[10px] text-slate-400">
+              {latest.steps?.filter((s) => s.status === "completed").length ?? 0} / {latest.steps?.length ?? 9} steps completed
+            </p>
+
+            <Button asChild size="sm" variant="outline" className="w-full rounded-xl">
+              <Link to={`/workflows/${latest.id}`}>
+                Open workflow <ChevronRight className="ml-1 h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Approval status card ─────────────────────────────────────────────────────
+
+function ApprovalCard({
+  approvals,
+  contractId,
+  workflowId,
+  currentUserClerkId,
+  isAdminOrManager,
+  onRefresh,
+}: {
+  approvals: Approval[];
+  contractId: string;
+  workflowId?: string;
+  currentUserClerkId?: string;
+  isAdminOrManager: boolean;
+  onRefresh: () => void;
+}) {
+  const [showPanel, setShowPanel] = useState(false);
+  const [voting, setVoting]       = useState<string | null>(null); // approvalId being voted on
+  const [voteError, setVoteError] = useState<string | null>(null);
+  const latest = approvals[0] ?? null;
+
+  async function handleVote(approvalId: string, decision: string) {
+    setVoting(approvalId); setVoteError(null);
+    try {
+      await api.castVote(approvalId, decision);
+      onRefresh();
+    } catch (err) {
+      setVoteError(err instanceof Error ? err.message : "Vote failed.");
+    } finally { setVoting(null); }
+  }
+
+  const voteCount = latest
+    ? {
+        approved: latest.approvers?.filter((a) => a.decision === "approved").length ?? 0,
+        rejected: latest.approvers?.filter((a) => a.decision === "rejected").length ?? 0,
+        pending:  latest.approvers?.filter((a) => !a.decision).length ?? 0,
+        total:    latest.approvers?.length ?? 0,
+      }
+    : null;
+
+  const alreadyVoted = latest && currentUserClerkId
+    ? latest.approvers?.some((a) => a.user_id === currentUserClerkId && a.decision)
+    : false;
+
+  return (
+    <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <ShieldCheck className="h-5 w-5 text-slate-500" /> Approval
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {voteError && <p className="text-xs text-red-600">{voteError}</p>}
+
+        {!latest && !showPanel && (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-500">No approval request yet.</p>
+            <Button
+              size="sm"
+              className="w-full rounded-xl"
+              onClick={() => setShowPanel(true)}
+            >
+              <Send className="mr-2 h-3.5 w-3.5" /> Send for Approval
+            </Button>
+          </div>
+        )}
+
+        {showPanel && (
+          <SendApprovalPanel
+            contractId={contractId}
+            workflowId={workflowId}
+            onDone={() => { setShowPanel(false); onRefresh(); }}
+            onClose={() => setShowPanel(false)}
+          />
+        )}
+
+        {latest && (
+          <div className="space-y-4">
+            {/* Status header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-800">{fmt(latest.approval_type)} Approval</p>
+                {latest.due_date && (
+                  <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-500">
+                    <Clock className="h-3 w-3" /> Due {fmtDate(latest.due_date)}
+                  </p>
+                )}
+              </div>
+              <Badge className={badgeClass(latest.status)}>{fmt(latest.status)}</Badge>
+            </div>
+
+            {/* Vote tally */}
+            {voteCount && voteCount.total > 0 && (
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-xl bg-green-50 py-2">
+                  <p className="text-lg font-bold text-green-700">{voteCount.approved}</p>
+                  <p className="text-[11px] text-green-600">Approved</p>
+                </div>
+                <div className="rounded-xl bg-red-50 py-2">
+                  <p className="text-lg font-bold text-red-700">{voteCount.rejected}</p>
+                  <p className="text-[11px] text-red-600">Rejected</p>
+                </div>
+                <div className="rounded-xl bg-slate-50 py-2">
+                  <p className="text-lg font-bold text-slate-600">{voteCount.pending}</p>
+                  <p className="text-[11px] text-slate-400">Pending</p>
+                </div>
+              </div>
+            )}
+
+            {/* Admin / manager voting buttons — shown while approval is pending */}
+            {isAdminOrManager && latest.status === "pending" && !alreadyVoted && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Cast your vote</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <Button
+                    size="sm"
+                    className="rounded-xl bg-green-600 hover:bg-green-700 text-white"
+                    onClick={() => handleVote(latest.id, "approved")}
+                    disabled={voting === latest.id}
+                  >
+                    {voting === latest.id
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <><ThumbsUp className="mr-1 h-3.5 w-3.5" /> Approve</>}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="rounded-xl"
+                    onClick={() => handleVote(latest.id, "rejected")}
+                    disabled={voting === latest.id}
+                  >
+                    <ThumbsDown className="mr-1 h-3.5 w-3.5" /> Reject
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="rounded-xl text-amber-700 border-amber-200 hover:bg-amber-50"
+                    onClick={() => handleVote(latest.id, "changes_requested")}
+                    disabled={voting === latest.id}
+                  >
+                    <RotateCcw className="mr-1 h-3.5 w-3.5" /> Revise
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {isAdminOrManager && latest.status === "pending" && alreadyVoted && (
+              <p className="flex items-center gap-1.5 text-xs text-green-600">
+                <CheckCircle2 className="h-3.5 w-3.5" /> You have already cast your vote
+              </p>
+            )}
+
+            {/* Approver list */}
+            {(latest.approvers?.length ?? 0) > 0 && (
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Approvers</p>
+                <div className="space-y-1.5">
+                  {latest.approvers.map((a, i) => (
+                    <div key={i} className="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2">
+                      <p className="truncate text-xs text-slate-600 max-w-[120px]">{a.user_id}</p>
+                      <Badge className={`text-[10px] ${badgeClass(a.decision ?? "pending")}`}>
+                        {a.decision ? fmt(a.decision) : "Pending"}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Send another approval if the last one closed */}
+            {["approved", "rejected"].includes(latest.status) && (
+              <Button size="sm" variant="outline" className="w-full rounded-xl" onClick={() => setShowPanel(true)}>
+                <Send className="mr-2 h-3.5 w-3.5" /> New Approval Request
+              </Button>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function ContractDetailsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useUser();
 
-  const [contract, setContract] = useState<Contract | null>(null);
+  const role = String(user?.publicMetadata?.role || user?.unsafeMetadata?.role || "").trim().toLowerCase();
+  const isAdminOrManager = role === "admin" || role === "manager";
+  const currentUserClerkId = user?.id ?? "";
+
+  const [contract, setContract]   = useState<Contract | null>(null);
   const [workflows, setWorkflows] = useState<WorkflowType[]>([]);
-  const [approvals, setApprovals] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [approvals, setApprovals] = useState<Approval[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [deleting, setDeleting]   = useState(false);
+  const [error, setError]         = useState<string | null>(null);
 
-  const loadContractDetails = async () => {
+  const load = useCallback(async () => {
     if (!id) return;
-
     setLoading(true);
-    setError(null);
-
     try {
-      const [contractData, workflowsData, approvalsData] = await Promise.all([
+      const [c, w, a] = await Promise.all([
         api.getContract(id),
         api.getContractWorkflows(id).catch(() => ({ workflows: [] })),
         api.getApprovalsByContract(id).catch(() => ({ approvals: [] })),
       ]);
-
-      setContract(contractData);
-      setWorkflows(Array.isArray(workflowsData?.workflows) ? workflowsData.workflows : []);
-      setApprovals(
-        Array.isArray((approvalsData as any)?.approvals)
-          ? (approvalsData as any).approvals
-          : []
-      );
+      setContract(c);
+      setWorkflows(Array.isArray((w as any)?.workflows) ? (w as any).workflows : []);
+      setApprovals(Array.isArray((a as any)?.approvals) ? (a as any).approvals : []);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load contract details."
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadContractDetails();
+      setError(err instanceof Error ? err.message : "Failed to load contract.");
+    } finally { setLoading(false); }
   }, [id]);
 
-  const contractGroups = useMemo(() => {
-    if (!contract) return [];
-    return [
-      {
-        name: formatLabel(contract.contract_type),
-        count: 1,
-      },
-    ];
-  }, [contract]);
+  useEffect(() => { load(); }, [load]);
 
-  const handleDelete = async () => {
+  const contractGroups = useMemo(
+    () => (contract ? [{ name: fmt(contract.contract_type), count: 1 }] : []),
+    [contract]
+  );
+
+  async function handleDelete() {
     if (!contract?.id) return;
-
-    const confirmed = window.confirm("Delete this contract?");
-    if (!confirmed) return;
-
+    if (!window.confirm("Delete this contract? This cannot be undone.")) return;
     setDeleting(true);
-    try {
-      await api.deleteContract(contract.id);
-      navigate("/contracts");
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to delete contract."
-      );
-    } finally {
-      setDeleting(false);
-    }
-  };
+    try { await api.deleteContract(contract.id); navigate("/contracts"); }
+    catch (err) { setError(err instanceof Error ? err.message : "Delete failed."); setDeleting(false); }
+  }
+
+  const latestWorkflowId = workflows[0]?.id;
 
   return (
     <AppShell
-      title="Contract Details"
-      subtitle="View the full contract record from your backend."
+      title={contract?.title || "Contract Details"}
+      subtitle="View, edit and manage your contract document."
       contractGroups={contractGroups}
       actions={
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" asChild>
-            <Link to="/contracts">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back
-            </Link>
+          <Button variant="outline" asChild className="rounded-xl">
+            <Link to="/contracts"><ArrowLeft className="mr-2 h-4 w-4" /> Back</Link>
           </Button>
-
-          {contract?.id ? (
-            <Button variant="outline" asChild>
+          {contract?.id && (
+            <Button variant="outline" asChild className="rounded-xl">
               <Link to={`/ai-analysis?contractId=${contract.id}`}>
-                <Bot className="mr-2 h-4 w-4" />
-                Analyze
+                <Bot className="mr-2 h-4 w-4" /> AI Analyse
               </Link>
             </Button>
-          ) : null}
-
-          <Button
-            variant="destructive"
-            onClick={handleDelete}
-            disabled={deleting || !contract}
-          >
+          )}
+          <Button variant="destructive" onClick={handleDelete} disabled={deleting || !contract} className="rounded-xl">
             <Trash2 className="mr-2 h-4 w-4" />
-            {deleting ? "Deleting..." : "Delete"}
+            {deleting ? "Deleting…" : "Delete"}
           </Button>
         </div>
       }
     >
-      {error ? (
-        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
+      {error && (
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <XCircle className="h-4 w-4 shrink-0" /> {error}
         </div>
-      ) : null}
+      )}
 
-      {loading ? (
-        <p className="text-sm text-slate-500">Loading contract details...</p>
-      ) : null}
+      {loading && (
+        <div className="flex items-center gap-2 py-10 text-sm text-slate-500">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading contract…
+        </div>
+      )}
 
-      {!loading && !contract ? (
-        <p className="text-sm text-slate-500">Contract not found.</p>
-      ) : null}
+      {!loading && !contract && <p className="text-sm text-slate-500">Contract not found.</p>}
 
-      {contract ? (
+      {contract && (
         <div className="space-y-6">
-          <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-6">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+
+          {/* ── Hero strip ───────────────────────────────────────────────── */}
+          <div className="rounded-3xl border border-slate-200 bg-slate-50/70 px-6 py-5">
+            <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h1 className="text-3xl font-semibold tracking-tight text-slate-950">
+                <h1 className="text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl">
                   {contract.title}
                 </h1>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Badge className={badgeClass(contract.status)}>
-                    {formatLabel(contract.status)}
-                  </Badge>
-                  <Badge className={badgeClass(contract.workflow_stage)}>
-                    {formatLabel(contract.workflow_stage)}
-                  </Badge>
-                  <Badge className={badgeClass(contract.risk_level)}>
-                    {formatLabel(contract.risk_level || "unrated")}
-                  </Badge>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Badge className={badgeClass(contract.status)}>{fmt(contract.status)}</Badge>
+                  <Badge className={badgeClass(contract.workflow_stage)}>{fmt(contract.workflow_stage)}</Badge>
+                  <Badge className={badgeClass(contract.risk_level)}>{fmt(contract.risk_level || "unrated")}</Badge>
                 </div>
               </div>
             </div>
 
-            <div className="mt-6 grid gap-4 xl:grid-cols-[1fr_1fr_1fr_1fr_1.4fr]">
-              <Card className="rounded-3xl border-slate-200 shadow-sm">
-                <CardContent className="p-5">
-                  <FileText className="mb-4 h-6 w-6 text-violet-500" />
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                    Type
-                  </p>
-                  <p className="mt-2 text-2xl font-semibold text-slate-900">
-                    {formatLabel(contract.contract_type)}
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card className="rounded-3xl border-slate-200 shadow-sm">
-                <CardContent className="p-5">
-                  <CircleDollarSign className="mb-4 h-6 w-6 text-emerald-500" />
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                    Value
-                  </p>
-                  <p className="mt-2 text-2xl font-semibold text-slate-900">
-                    {formatCurrency(contract.value)}
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card className="rounded-3xl border-slate-200 shadow-sm">
-                <CardContent className="p-5">
-                  <CalendarDays className="mb-4 h-6 w-6 text-slate-700" />
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                    Start
-                  </p>
-                  <p className="mt-2 text-2xl font-semibold text-slate-900">
-                    {formatDate(contract.start_date)}
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card className="rounded-3xl border-slate-200 shadow-sm">
-                <CardContent className="p-5">
-                  <CalendarDays className="mb-4 h-6 w-6 text-amber-500" />
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                    End
-                  </p>
-                  <p className="mt-2 text-2xl font-semibold text-slate-900">
-                    {formatDate(contract.end_date)}
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card className="rounded-3xl border-slate-200 shadow-sm">
-                <CardContent className="p-5">
-                  <Tag className="mb-4 h-6 w-6 text-slate-500" />
-                  <p className="mb-3 text-xs uppercase tracking-[0.2em] text-slate-400">
-                    Tags
-                  </p>
-
-                  <div className="flex flex-wrap gap-2">
-                    {contract.tags?.length ? (
-                      contract.tags.map((tag, index) => (
-                        <Badge
-                          key={`${tag}-${index}`}
-                          className="bg-violet-100 text-violet-700"
-                        >
-                          {String(tag).toUpperCase()}
-                        </Badge>
-                      ))
-                    ) : (
-                      <p className="text-sm text-slate-500">No tags yet</p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                { icon: <FileText className="h-5 w-5 text-violet-500" />, label: "Type",  value: fmt(contract.contract_type) },
+                { icon: <CircleDollarSign className="h-5 w-5 text-emerald-500" />, label: "Value", value: fmtCurrency(contract.value) },
+                { icon: <CalendarDays className="h-5 w-5 text-blue-500" />, label: "Start", value: fmtDate(contract.start_date) },
+                { icon: <CalendarDays className="h-5 w-5 text-amber-500" />, label: "End",   value: fmtDate(contract.end_date) },
+              ].map(({ icon, label, value }) => (
+                <Card key={label} className="rounded-2xl border-slate-200 shadow-sm">
+                  <CardContent className="flex items-center gap-3 p-4">
+                    {icon}
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-slate-400">{label}</p>
+                      <p className="mt-0.5 font-semibold text-slate-900">{value}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           </div>
 
+          {/* ── Document viewer / editor ──────────────────────────────────── */}
+          <DocumentPanel contractId={contract.id} />
+
+          {/* ── Details + sidebar ─────────────────────────────────────────── */}
           <div className="grid gap-6 xl:grid-cols-[1.7fr_0.8fr]">
+
+            {/* Details */}
             <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
-              <CardHeader>
-                <CardTitle>Details</CardTitle>
-              </CardHeader>
-
-              <CardContent className="space-y-5">
-                <div className="rounded-2xl bg-slate-50 p-5">
-                  <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
-                    Description
-                  </p>
-                  <p className="mt-3 text-lg text-slate-800">
-                    {contract.description || "No description provided."}
-                  </p>
+              <CardHeader><CardTitle>Contract Details</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <InfoBlock label="Description" value={contract.description || "No description provided."} />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <InfoBlock label="Approval Type"    value={fmt((contract as any).approval_type)} />
+                  <InfoBlock label="Workflow Trigger" value={fmt((contract as any).workflow_trigger)} />
                 </div>
+                <InfoBlock label="Payment Terms" value={contract.payment_terms || "—"} />
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="rounded-2xl bg-slate-50 p-5">
-                    <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
-                      Approval Type
-                    </p>
-                    <p className="mt-3 text-xl font-medium text-slate-900">
-                      {formatLabel((contract as any).approval_type)}
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl bg-slate-50 p-5">
-                    <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
-                      Workflow Trigger
-                    </p>
-                    <p className="mt-3 text-xl font-medium text-slate-900">
-                      {formatLabel((contract as any).workflow_trigger)}
-                    </p>
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <p className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
+                    <Tag className="h-3.5 w-3.5" /> Tags
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {contract.tags?.length
+                      ? contract.tags.map((t, i) => (
+                          <Badge key={i} className="bg-violet-100 text-violet-700">{String(t).toUpperCase()}</Badge>
+                        ))
+                      : <p className="text-sm text-slate-500">No tags</p>}
                   </div>
                 </div>
 
-                <div className="rounded-2xl bg-slate-50 p-5">
-                  <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
-                    Payment Terms
-                  </p>
-                  <p className="mt-3 text-xl text-slate-900">
-                    {contract.payment_terms || "No payment terms available."}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl bg-slate-50 p-5">
-                  <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
-                    Parties
-                  </p>
-
-                  <div className="mt-3 space-y-3">
-                    {contract.parties?.length ? (
-                      contract.parties.map((party, index) => (
-                        <div
-                          key={`${party.name}-${index}`}
-                          className="rounded-xl border border-slate-200 bg-white p-4"
-                        >
-                          <p className="font-medium text-slate-900">
-                            {party.name || "Unnamed party"}
-                          </p>
-                          <p className="mt-1 text-sm text-slate-500">
-                            {party.role || "No role"}
-                            {party.organization
-                              ? ` • ${party.organization}`
-                              : ""}
-                          </p>
-                          {party.email ? (
-                            <p className="mt-1 text-sm text-slate-500">
-                              {party.email}
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <p className="mb-3 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Parties</p>
+                  {contract.parties?.length
+                    ? (
+                      <div className="space-y-2">
+                        {contract.parties.map((p, i) => (
+                          <div key={i} className="rounded-xl border border-slate-200 bg-white p-3">
+                            <p className="font-medium text-slate-900">{p.name || "Unnamed"}</p>
+                            <p className="mt-0.5 text-sm text-slate-500">
+                              {p.role}{p.organization ? ` · ${p.organization}` : ""}
                             </p>
-                          ) : null}
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-slate-500">
-                        No parties added yet.
-                      </p>
-                    )}
-                  </div>
+                            {p.email && <p className="text-xs text-slate-400 mt-0.5">{p.email}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    )
+                    : <p className="text-sm text-slate-500">No parties added yet.</p>
+                  }
                 </div>
               </CardContent>
             </Card>
 
+            {/* Sidebar */}
             <div className="space-y-6">
-              <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Workflow className="h-5 w-5 text-slate-500" />
-                    Workflows
-                  </CardTitle>
-                </CardHeader>
 
-                <CardContent>
-                  {workflows.length ? (
-                    <div className="space-y-3">
-                      {workflows.map((workflow) => (
-                        <Link
-                          key={workflow.id}
-                          to={`/workflows/${workflow.id}`}
-                          className="block rounded-2xl border border-slate-200 p-4 transition hover:bg-slate-50"
-                        >
-                          <p className="font-medium text-slate-900">
-                            {workflow.name || "Workflow"}
-                          </p>
-                          <p className="mt-1 text-sm text-slate-500">
-                            {formatLabel((workflow as any).status || "active")}
-                          </p>
-                        </Link>
-                      ))}
+              {/* Workflow card */}
+              <WorkflowCard
+                workflows={workflows}
+                contractId={contract.id}
+                onWorkflowCreated={load}
+              />
+
+              {/* Approval card */}
+              <ApprovalCard
+                approvals={approvals}
+                contractId={contract.id}
+                workflowId={latestWorkflowId}
+                currentUserClerkId={currentUserClerkId}
+                isAdminOrManager={isAdminOrManager}
+                onRefresh={load}
+              />
+
+              {/* AI summary (if available) */}
+              {contract.ai_analysis && (
+                <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Bot className="h-5 w-5 text-violet-500" /> AI Summary
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-slate-600">Risk</span>
+                      <Badge className={badgeClass(contract.ai_analysis.risk_level)}>
+                        {fmt(contract.ai_analysis.risk_level)} — {contract.ai_analysis.risk_score ?? "—"}
+                      </Badge>
                     </div>
-                  ) : (
-                    <p className="text-sm text-slate-500">No workflows yet</p>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <ShieldCheck className="h-5 w-5 text-slate-500" />
-                    Approvals
-                  </CardTitle>
-                </CardHeader>
-
-                <CardContent>
-                  {approvals.length ? (
-                    <div className="space-y-3">
-                      {approvals.map((approval, index) => (
-                        <div
-                          key={approval.id || index}
-                          className="rounded-2xl border border-slate-200 p-4"
-                        >
-                          <p className="font-medium text-slate-900">
-                            {approval.name ||
-                              approval.approver_name ||
-                              approval.approver ||
-                              "Approval"}
-                          </p>
-                          <p className="mt-1 text-sm text-slate-500">
-                            {formatLabel(approval.status || "pending")}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-slate-500">No approvals yet</p>
-                  )}
-                </CardContent>
-              </Card>
+                    {contract.ai_analysis.summary && (
+                      <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600 leading-relaxed">
+                        {contract.ai_analysis.summary}
+                      </p>
+                    )}
+                    {(contract.ai_analysis.recommendations?.length ?? 0) > 0 && (
+                      <ul className="space-y-1">
+                        {contract.ai_analysis.recommendations!.slice(0, 3).map((r, i) => (
+                          <li key={i} className="flex items-start gap-2 text-xs text-slate-600">
+                            <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-green-500" /> {r}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <Button variant="outline" asChild size="sm" className="w-full rounded-xl">
+                      <Link to={`/ai-analysis?contractId=${contract.id}`}>Full Analysis</Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </div>
         </div>
-      ) : null}
+      )}
     </AppShell>
+  );
+}
+
+// ─── tiny helper ─────────────────────────────────────────────────────────────
+function InfoBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-slate-50 p-4">
+      <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">{label}</p>
+      <p className="mt-2 text-slate-800">{value}</p>
+    </div>
   );
 }
