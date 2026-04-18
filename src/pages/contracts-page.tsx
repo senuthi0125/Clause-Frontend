@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Search, Trash2, Upload, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Plus, Search, Trash2, Upload } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
 import { AppShell } from "@/components/layout/app-shell";
@@ -141,7 +141,6 @@ function getRiskBadgeClass(contract: Contract) {
 
 export default function ContractsPage() {
   const navigate = useNavigate();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { user } = useUser();
 
   const role = String(
@@ -154,7 +153,6 @@ export default function ContractsPage() {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [meta, setMeta] = useState<ContractsResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadContracts = async () => {
@@ -207,37 +205,6 @@ export default function ContractsPage() {
     }
   };
 
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleUploadChange = async (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploading(true);
-    setError(null);
-
-    try {
-      const result = await api.uploadContract(file);
-      await loadContracts();
-
-      const newId = result?.contract?.id || result?.id;
-      if (newId) {
-        navigate(`/contracts/${newId}`);
-      }
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to upload contract."
-      );
-    } finally {
-      setUploading(false);
-      e.target.value = "";
-    }
-  };
-
   return (
     <AppShell
       title="Contracts"
@@ -248,14 +215,6 @@ export default function ContractsPage() {
       }
       contractGroups={contractGroups}
     >
-      <input
-        ref={fileInputRef}
-        type="file"
-        className="hidden"
-        accept=".pdf,.doc,.docx,.txt"
-        onChange={handleUploadChange}
-      />
-
       <Card className="border border-slate-200 bg-white shadow-sm">
         <CardContent className="p-4">
           <div className="space-y-4">
@@ -289,18 +248,12 @@ export default function ContractsPage() {
             </div>
 
             <div className="flex flex-wrap items-center justify-center gap-3 border-t border-slate-100 pt-1">
-              <Button
-                variant="outline"
-                onClick={handleUploadClick}
-                disabled={uploading}
-                className="h-11 rounded-xl"
-              >
-                {uploading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
+              {/* Upload goes through the full pipeline: upload → AI analysis → conflict check */}
+              <Button variant="outline" asChild className="h-11 rounded-xl">
+                <Link to="/upload">
                   <Upload className="mr-2 h-4 w-4" />
-                )}
-                Upload contract
+                  Upload contract
+                </Link>
               </Button>
 
               <Button asChild className="h-11 rounded-xl">

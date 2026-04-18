@@ -262,6 +262,39 @@ export const api = {
   getApprovalsByContract: (contractId: string) =>
     request<ApprovalListResponse>(`/api/approvals/contract/${contractId}`),
 
+  createApproval: (payload: {
+    contract_id: string;
+    workflow_id?: string;
+    approval_type: string;
+    approver_ids: string[];
+  }) =>
+    request<unknown>("/api/approvals/", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  castVote: (approvalId: string, decision: string, comments?: string) =>
+    request<unknown>(`/api/approvals/${approvalId}/vote`, {
+      method: "POST",
+      body: JSON.stringify({ decision, comments: comments || null }),
+    }),
+
+  getDocumentText: (contractId: string) =>
+    request<{ text: string; file_type: string; has_file: boolean }>(
+      `/api/documents/text/${contractId}`
+    ),
+
+  saveDocumentText: (contractId: string, text: string) =>
+    request<{ message: string }>(`/api/documents/text/${contractId}`, {
+      method: "PUT",
+      body: JSON.stringify({ text }),
+    }),
+
+  scanContractConflicts: (contractId: string) =>
+    request<ConflictResult>(`/api/ai/conflicts/scan/${contractId}`, {
+      method: "POST",
+    }),
+
   analyzeText: (text: string) =>
     request<AiAnalysisResponse>("/api/ai/analyze/text", {
       method: "POST",
@@ -344,6 +377,49 @@ export const api = {
     request<unknown>(`/api/auth/users/${userId}/deactivate`, {
       method: "PATCH",
     }),
+
+  activateUser: (userId: string) =>
+    request<unknown>(`/api/auth/users/${userId}/activate`, {
+      method: "PATCH",
+    }),
+
+  // ── Calendar ──────────────────────────────────────────────────────────────
+  getCalendarStatus: () =>
+    request<{ connected: boolean; connected_at?: string }>("/api/calendar/status"),
+
+  getCalendarAuthUrl: () =>
+    request<{ auth_url: string }>("/api/calendar/auth"),
+
+  getContractDates: () =>
+    request<{ events: Array<{ id: string; contract_id: string; title: string; date: string; kind: "start" | "expiry"; contract_type: string }>; count: number }>("/api/calendar/contract-dates"),
+
+  getCalendarEvents: (maxResults = 20) =>
+    request<{ events: Array<{ id: string; summary: string; start: string; end: string; html_link: string }>; count: number }>(`/api/calendar/events?max_results=${maxResults}`),
+
+  syncContractToCalendar: (contractId: string) =>
+    request<{ message: string; start_event_link: string; end_event_link: string }>(`/api/calendar/sync/${contractId}`, { method: "POST" }),
+
+  syncAllToCalendar: () =>
+    request<{ synced: number; failed: number; total: number }>("/api/calendar/sync-all", { method: "POST" }),
+
+  disconnectCalendar: () =>
+    request<{ message: string }>("/api/calendar/disconnect", { method: "DELETE" }),
+
+  // ── Email / Notifications ──────────────────────────────────────────────────
+  getEmailConfig: () =>
+    request<{ configured: boolean; smtp_email: string | null }>("/api/notifications/email-config"),
+
+  sendTestEmail: (toEmail: string) =>
+    request<{ message: string }>("/api/notifications/send-test-email", {
+      method: "POST",
+      body: JSON.stringify({ to_email: toEmail }),
+    }),
+
+  sendExpiryAlerts: (dryRun = false) =>
+    request<{ sent: number; skipped: number; errors: number; dry_run: boolean }>(
+      `/api/notifications/send-expiry-alerts?dry_run=${dryRun}`,
+      { method: "POST" }
+    ),
 
   listAuditLogs: (
     params: {

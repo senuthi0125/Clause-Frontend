@@ -14,6 +14,7 @@ import {
   ScrollText,
   LockKeyhole,
   Workflow,
+  UploadCloud,
 } from "lucide-react";
 import { UserButton, useUser } from "@clerk/clerk-react";
 import { cn } from "@/lib/utils";
@@ -85,6 +86,11 @@ export function AppShell({
       label: "Contracts",
       href: "/contracts",
       icon: FileText,
+    },
+    {
+      label: "Upload Contract",
+      href: "/upload",
+      icon: UploadCloud,
     },
     {
       label: "AI Analysis",
