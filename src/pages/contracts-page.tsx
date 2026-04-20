@@ -1,89 +1,39 @@
-import { useEffect, useMemo, useState } from "react";
-import { Plus, Search, Trash2, Upload } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ChevronDown,
+  FileText,
+  MoreHorizontal,
+  Plus,
+  Search,
+  Trash2,
+  Upload,
+  Workflow,
+} from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api, buildContractsQuery } from "@/lib/api";
 import type { Contract, ContractsResponse } from "@/types/api";
 
-// Ordered pipeline stages — used to build the progress tracker
-const WORKFLOW_STAGES = [
-  "request",
-  "authoring",
-  "review",
-  "approval",
-  "execution",
-  "storage",
-  "monitoring",
-  "renewal",
-] as const;
+// ── helpers ──────────────────────────────────────────────────────────────────
 
-function WorkflowProgressBar({ stage }: { stage?: string | null }) {
-  const current = WORKFLOW_STAGES.indexOf(
-    (stage ?? "request") as (typeof WORKFLOW_STAGES)[number]
-  );
-  const activeIdx = current < 0 ? 0 : current;
-
-  return (
-    <div className="mt-3">
-      <p className="mb-1.5 text-xs font-medium text-slate-500 uppercase tracking-wide">
-        Document Stage
-      </p>
-      <div className="flex items-center gap-0.5">
-        {WORKFLOW_STAGES.map((s, i) => {
-          const isDone = i < activeIdx;
-          const isCurrent = i === activeIdx;
-          return (
-            <div key={s} className="flex flex-1 flex-col items-center gap-1">
-              <div
-                className={`h-1.5 w-full rounded-full transition-all ${
-                  isDone
-                    ? "bg-green-500"
-                    : isCurrent
-                    ? "bg-violet-500"
-                    : "bg-slate-200"
-                }`}
-              />
-              {isCurrent && (
-                <span className="text-[10px] font-medium text-violet-600 whitespace-nowrap">
-                  {formatLabel(s)}
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function formatLabel(value?: string | null) {
-  return (value || "-")
+function fmt(value?: string | null) {
+  return (value || "—")
     .replace(/_/g, " ")
-    .split(" ")
-    .map((part) => (part ? part[0].toUpperCase() + part.slice(1) : part))
-    .join(" ");
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function formatDate(value?: string | null) {
+function fmtDate(value?: string | null) {
   if (!value) return "—";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-function formatCurrency(value?: number | null) {
-  if (value == null) return "—";
+function fmtCurrency(value?: number | null) {
+  if (value == null) return null;
   return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency: "USD",
@@ -91,53 +41,256 @@ function formatCurrency(value?: number | null) {
   }).format(value);
 }
 
-function badgeClass(value?: string | null) {
-  switch ((value || "").toLowerCase()) {
-    case "high":
-      return "bg-red-100 text-red-700";
-    case "medium":
-      return "bg-amber-100 text-amber-700";
-    case "low":
-      return "bg-green-100 text-green-700";
-    case "active":
-      return "bg-green-100 text-green-700";
-    case "draft":
-      return "bg-slate-100 text-slate-700";
-    case "review":
-    case "approval":
-    case "authoring":
-    case "execution":
-    case "monitoring":
-    case "request":
-    case "storage":
-      return "bg-violet-100 text-violet-700";
-    default:
-      return "bg-slate-100 text-slate-700";
-  }
+const STATUS_STYLES: Record<string, string> = {
+  active: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  draft: "bg-slate-100 text-slate-600 border-slate-200",
+  expired: "bg-rose-50 text-rose-700 border-rose-200",
+  terminated: "bg-amber-50 text-amber-700 border-amber-200",
+  renewed: "bg-blue-50 text-blue-700 border-blue-200",
+};
+
+const STATUS_DOT: Record<string, string> = {
+  active: "bg-emerald-500",
+  draft: "bg-slate-400",
+  expired: "bg-rose-500",
+  terminated: "bg-amber-500",
+  renewed: "bg-blue-500",
+};
+
+const RISK_STYLES: Record<string, string> = {
+  high: "bg-rose-50 text-rose-700 border-rose-200",
+  medium: "bg-amber-50 text-amber-700 border-amber-200",
+  low: "bg-emerald-50 text-emerald-700 border-emerald-200",
+};
+
+function riskLabel(contract: Contract) {
+  const score = (contract as Contract & { risk_score?: number | null }).risk_score;
+  if (typeof score === "number") return `Risk ${score}`;
+  if (contract.risk_level) return fmt(contract.risk_level) + " risk";
+  return null;
 }
 
-function getRiskBadgeLabel(contract: Contract) {
-  const riskScore = (contract as Contract & { risk_score?: number | null })
-    .risk_score;
+const STATUSES = ["draft", "active", "expired", "terminated", "renewed"] as const;
 
-  if (typeof riskScore === "number" && !Number.isNaN(riskScore)) {
-    return `Risk ${riskScore}`;
-  }
+// ── Add-contract dropdown ─────────────────────────────────────────────────────
 
-  if (contract.risk_level) {
-    return `${formatLabel(contract.risk_level)} risk`;
-  }
+function AddContractButton() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
-  return "Unrated";
+  useEffect(() => {
+    function close(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <Button
+        onClick={() => setOpen((o) => !o)}
+        className="flex h-9 items-center gap-1.5 rounded-lg text-[13px]"
+      >
+        <Plus className="h-3.5 w-3.5" />
+        New contract
+        <ChevronDown className="h-3 w-3 opacity-70" />
+      </Button>
+
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1.5 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+          <Link
+            to="/upload"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2.5 px-3 py-2.5 text-[13px] text-slate-700 hover:bg-slate-50"
+          >
+            <Upload className="h-3.5 w-3.5 text-slate-400" />
+            Upload a document
+          </Link>
+          <Link
+            to="/contracts/new"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2.5 px-3 py-2.5 text-[13px] text-slate-700 hover:bg-slate-50"
+          >
+            <FileText className="h-3.5 w-3.5 text-slate-400" />
+            Use a template
+          </Link>
+          <Link
+            to="/contracts/create"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2.5 px-3 py-2.5 text-[13px] text-slate-700 hover:bg-slate-50"
+          >
+            <Plus className="h-3.5 w-3.5 text-slate-400" />
+            Start from scratch
+          </Link>
+        </div>
+      )}
+    </div>
+  );
 }
 
-function getRiskBadgeClass(contract: Contract) {
-  if (contract.risk_level) {
-    return badgeClass(contract.risk_level);
-  }
+// ── Per-card actions menu ────────────────────────────────────────────────────
 
-  return "bg-slate-100 text-slate-700";
+function CardMenu({
+  contract,
+  isAdminOrManager,
+  onDelete,
+}: {
+  contract: Contract;
+  isAdminOrManager: boolean;
+  onDelete: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function close(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+
+  const hasItems = contract.workflow_id || isAdminOrManager;
+  if (!hasItems) return null;
+
+  return (
+    <div ref={ref} className="relative" onClick={(e) => e.stopPropagation()}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+      >
+        <MoreHorizontal className="h-4 w-4" />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1 w-44 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+          {contract.workflow_id && (
+            <Link
+              to={`/workflows/${contract.workflow_id}`}
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2 px-3 py-2 text-[13px] text-slate-700 hover:bg-slate-50"
+            >
+              <Workflow className="h-3.5 w-3.5 text-slate-400" />
+              {isAdminOrManager ? "Manage workflow" : "Track progress"}
+            </Link>
+          )}
+          <Link
+            to="/conflict-detection"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2 px-3 py-2 text-[13px] text-slate-700 hover:bg-slate-50"
+          >
+            <Search className="h-3.5 w-3.5 text-slate-400" />
+            Compare clauses
+          </Link>
+          {isAdminOrManager && (
+            <>
+              <div className="my-1 border-t border-slate-100" />
+              <button
+                onClick={() => { setOpen(false); onDelete(contract.id); }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-[13px] text-rose-600 hover:bg-rose-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
+
+// ── Contract card ────────────────────────────────────────────────────────────
+
+function ContractCard({
+  contract,
+  isAdminOrManager,
+  onDelete,
+  onClick,
+}: {
+  contract: Contract;
+  isAdminOrManager: boolean;
+  onDelete: (id: string) => void;
+  onClick: () => void;
+}) {
+  const status = (contract.status || "draft").toLowerCase();
+  const risk = (contract.risk_level || "").toLowerCase();
+  const dot = STATUS_DOT[status] ?? "bg-slate-300";
+  const statusStyle = STATUS_STYLES[status] ?? "bg-slate-100 text-slate-600 border-slate-200";
+  const riskStyle = RISK_STYLES[risk];
+  const riskText = riskLabel(contract);
+  const currency = fmtCurrency(contract.value);
+
+  return (
+    <div
+      onClick={onClick}
+      className="group cursor-pointer rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md"
+    >
+      {/* Title row */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${dot}`} />
+          <div className="min-w-0">
+            <h3 className="truncate text-[15px] font-semibold text-slate-900">
+              {contract.title}
+            </h3>
+            {contract.description && (
+              <p className="mt-0.5 line-clamp-1 text-[13px] text-slate-500">
+                {contract.description}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Badge className={`border text-[11px] font-medium ${statusStyle}`}>
+            {fmt(contract.status)}
+          </Badge>
+          {riskText && riskStyle && (
+            <Badge className={`border text-[11px] font-medium ${riskStyle}`}>
+              {riskText}
+            </Badge>
+          )}
+          <CardMenu contract={contract} isAdminOrManager={isAdminOrManager} onDelete={onDelete} />
+        </div>
+      </div>
+
+      {/* Meta row */}
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-slate-500">
+        {contract.contract_type && (
+          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-slate-600">
+            {fmt(contract.contract_type)}
+          </span>
+        )}
+        {currency && <span>{currency}</span>}
+        {contract.start_date && (
+          <span>
+            {fmtDate(contract.start_date)}
+            {contract.end_date ? ` → ${fmtDate(contract.end_date)}` : ""}
+          </span>
+        )}
+        {contract.workflow_stage && (
+          <span className="rounded-md bg-violet-50 px-2 py-0.5 text-violet-600">
+            {fmt(contract.workflow_stage)}
+          </span>
+        )}
+        {contract.current_version && contract.current_version > 1 && (
+          <span className="text-slate-400">v{contract.current_version}</span>
+        )}
+      </div>
+
+      {/* Parties */}
+      {contract.parties && contract.parties.length > 0 && (
+        <p className="mt-2 text-[12px] text-slate-400">
+          {contract.parties.map((p) => p.name).join(" · ")}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ContractsPage() {
   const navigate = useNavigate();
@@ -155,53 +308,49 @@ export default function ContractsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadContracts = async () => {
+  const load = async (s = search, st = status) => {
     setLoading(true);
     setError(null);
-
     try {
-      const query = buildContractsQuery({ search, status, per_page: 50 });
+      const query = buildContractsQuery({ search: s, status: st, per_page: 50 });
       const data = await api.listContracts(query);
       setContracts(Array.isArray(data.contracts) ? data.contracts : []);
       setMeta(data);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load contracts."
-      );
+      setError(err instanceof Error ? err.message : "Failed to load contracts.");
     } finally {
       setLoading(false);
     }
   };
 
+  // Auto-reload when status filter changes
+  useEffect(() => { load(search, status); }, [status]);
+
+  // Debounced search
   useEffect(() => {
-    loadContracts();
-  }, []);
+    const t = setTimeout(() => load(search, status), 400);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const contractGroups = useMemo(() => {
     const counts = new Map<string, number>();
-
-    contracts.forEach((contract) => {
-      const type = contract.contract_type || "other";
-      counts.set(type, (counts.get(type) || 0) + 1);
+    contracts.forEach((c) => {
+      const t = c.contract_type || "other";
+      counts.set(t, (counts.get(t) || 0) + 1);
     });
-
     return Array.from(counts.entries()).map(([name, count]) => ({
-      name: formatLabel(name),
+      name: fmt(name),
       count,
     }));
   }, [contracts]);
 
   const deleteContract = async (id: string) => {
-    const confirmed = window.confirm("Delete this contract?");
-    if (!confirmed) return;
-
+    if (!window.confirm("Delete this contract? This cannot be undone.")) return;
     try {
       await api.deleteContract(id);
-      await loadContracts();
+      await load();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to delete contract."
-      );
+      setError(err instanceof Error ? err.message : "Failed to delete.");
     }
   };
 
@@ -210,192 +359,95 @@ export default function ContractsPage() {
       title="Contracts"
       subtitle={
         isAdminOrManager
-          ? "All contracts across all users — manage, review, and advance workflows."
-          : "Your uploaded contracts — track each document's approval stage below."
+          ? "All contracts across your organisation."
+          : "Your contracts — click any card to view details."
       }
       contractGroups={contractGroups}
+      actions={<AddContractButton />}
     >
-      <Card className="border border-slate-200 bg-white shadow-sm">
-        <CardContent className="p-4">
-          <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-[1fr_220px_auto]">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search by title"
-                  className="h-11 pl-9"
-                />
-              </div>
-
-              <select
-                className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm"
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-              >
-                <option value="">All statuses</option>
-                <option value="draft">Draft</option>
-                <option value="active">Active</option>
-                <option value="expired">Expired</option>
-                <option value="terminated">Terminated</option>
-                <option value="renewed">Renewed</option>
-              </select>
-
-              <Button onClick={loadContracts} className="h-11 rounded-xl">
-                Apply filters
-              </Button>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-center gap-3 border-t border-slate-100 pt-1">
-              {/* Upload goes through the full pipeline: upload → AI analysis → conflict check */}
-              <Button variant="outline" asChild className="h-11 rounded-xl">
-                <Link to="/upload">
-                  <Upload className="mr-2 h-4 w-4" />
-                  Upload contract
-                </Link>
-              </Button>
-
-              <Button asChild className="h-11 rounded-xl">
-                <Link to="/contracts/new">
-                  <Plus className="mr-2 h-4 w-4" />
-                  New contract
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {error ? (
-        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+      {error && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
-      ) : null}
+      )}
 
-      <div className="mt-5 grid gap-4">
-        {loading ? (
-          <p className="text-sm text-slate-500">Loading contracts...</p>
-        ) : null}
+      {/* Search + filter */}
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search contracts…"
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-4 text-sm outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+          />
+        </div>
 
-        {!loading && contracts.length === 0 ? (
-          <p className="text-sm text-slate-500">No contracts found.</p>
-        ) : null}
-
-        {contracts.map((contract) => (
-          <Card
-            key={contract.id}
-            className="cursor-pointer border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 hover:shadow-md"
-            onClick={() => navigate(`/contracts/${contract.id}`)}
+        {/* Status pills */}
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            onClick={() => setStatus("")}
+            className={`rounded-full border px-3 py-1 text-[12.5px] font-medium transition ${
+              status === ""
+                ? "border-slate-800 bg-slate-900 text-white"
+                : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+            }`}
           >
-            <CardHeader>
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <CardTitle>{contract.title}</CardTitle>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {contract.description || "No description provided."}
-                  </p>
-                </div>
-
-                <div
-                  className="flex flex-wrap gap-2"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Badge className={badgeClass(contract.status)}>
-                    {formatLabel(contract.status)}
-                  </Badge>
-                  <Badge className={badgeClass(contract.workflow_stage)}>
-                    {formatLabel(contract.workflow_stage)}
-                  </Badge>
-                  <Badge className={getRiskBadgeClass(contract)}>
-                    {getRiskBadgeLabel(contract)}
-                  </Badge>
-                </div>
-              </div>
-            </CardHeader>
-
-            <CardContent>
-              <div className="grid gap-3 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-5">
-                <div>
-                  <span className="font-medium text-slate-900">Type:</span>{" "}
-                  {formatLabel(contract.contract_type)}
-                </div>
-                <div>
-                  <span className="font-medium text-slate-900">Value:</span>{" "}
-                  {formatCurrency(contract.value)}
-                </div>
-                <div>
-                  <span className="font-medium text-slate-900">Start:</span>{" "}
-                  {formatDate(contract.start_date)}
-                </div>
-                <div>
-                  <span className="font-medium text-slate-900">End:</span>{" "}
-                  {formatDate(contract.end_date)}
-                </div>
-                <div>
-                  <span className="font-medium text-slate-900">Version:</span>{" "}
-                  {contract.current_version ?? 1}
-                </div>
-              </div>
-
-              {/* Workflow progress bar — always visible so users know their document stage */}
-              <WorkflowProgressBar stage={contract.workflow_stage} />
-
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-                <div className="flex flex-col gap-1">
-                  <div className="text-sm text-slate-500">
-                    Parties:{" "}
-                    {contract.parties?.map((party) => party.name).join(", ") ||
-                      "No parties added"}
-                  </div>
-                  {isAdminOrManager && contract.created_by && (
-                    <div className="text-xs text-slate-400">
-                      Uploaded by:{" "}
-                      <span className="font-medium text-slate-600">
-                        {contract.created_by}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                <div
-                  className="flex flex-wrap gap-2"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {contract.workflow_id ? (
-                    <Button variant="outline" asChild className="rounded-xl">
-                      <Link to={`/workflows/${contract.workflow_id}`}>
-                        {isAdminOrManager ? "Manage workflow" : "Track progress"}
-                      </Link>
-                    </Button>
-                  ) : null}
-
-                  <Button variant="outline" asChild className="rounded-xl">
-                    <Link to="/conflict-detection">Compare</Link>
-                  </Button>
-
-                  {isAdminOrManager && (
-                    <Button
-                      variant="destructive"
-                      onClick={() => deleteContract(contract.id)}
-                      className="rounded-xl"
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+            All
+          </button>
+          {STATUSES.map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatus(status === s ? "" : s)}
+              className={`rounded-full border px-3 py-1 text-[12.5px] font-medium capitalize transition ${
+                status === s
+                  ? "border-slate-800 bg-slate-900 text-white"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {meta ? (
-        <p className="mt-4 text-sm text-slate-500">
-          Showing {contracts.length} of {meta.total} contracts.
+      {/* Contract list */}
+      {loading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-24 animate-pulse rounded-2xl bg-white border border-slate-200" />
+          ))}
+        </div>
+      ) : contracts.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-slate-200 bg-white py-16 text-center">
+          <FileText className="h-8 w-8 text-slate-300" />
+          <p className="text-sm font-medium text-slate-500">No contracts found</p>
+          <p className="text-xs text-slate-400">
+            Try adjusting your search or{" "}
+            <Link to="/upload" className="text-indigo-500 underline underline-offset-2">
+              upload a contract
+            </Link>
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {contracts.map((contract) => (
+            <ContractCard
+              key={contract.id}
+              contract={contract}
+              isAdminOrManager={isAdminOrManager}
+              onDelete={deleteContract}
+              onClick={() => navigate(`/contracts/${contract.id}`)}
+            />
+          ))}
+        </div>
+      )}
+
+      {meta && !loading && (
+        <p className="mt-4 text-[12.5px] text-slate-400">
+          {contracts.length} of {meta.total} contracts
         </p>
-      ) : null}
+      )}
     </AppShell>
   );
 }

@@ -12,7 +12,6 @@ import {
   ScrollText,
   LockKeyhole,
   Workflow,
-  UploadCloud,
   Bell,
   ChevronRight,
 } from "lucide-react";
@@ -41,7 +40,6 @@ const MAIN_SECTIONS: NavSection[] = [
     label: "Contracts",
     items: [
       { label: "All Contracts", href: "/contracts", icon: FileText },
-      { label: "Upload", href: "/upload", icon: UploadCloud },
     ],
   },
   {
