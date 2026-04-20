@@ -1,25 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangle,
   ArrowRight,
+  FileText,
   CheckCircle2,
   Clock3,
-  FileText,
-  ShieldAlert,
-  Sparkles,
+  AlertTriangle,
   TrendingUp,
+  ShieldAlert,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { AppShell } from "@/components/layout/app-shell";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
 import type { DashboardStats } from "@/types/api";
 
-type StatusItem = {
-  status: string;
-  count: number;
-};
-
+type StatusItem = { status: string; count: number };
 type ExpiringItem = {
   id: string;
   title: string;
@@ -27,7 +22,6 @@ type ExpiringItem = {
   end_date: string;
   days_remaining: number;
 };
-
 type ActivityItem = {
   id: string;
   title: string;
@@ -36,43 +30,37 @@ type ActivityItem = {
   updated_at: string;
 };
 
-function formatTypeLabel(value: string) {
+function label(value: string) {
   return value
     .replace(/_/g, " ")
-    .split(" ")
-    .map((part) => (part ? part[0].toUpperCase() + part.slice(1) : part))
-    .join(" ");
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function formatDate(value: string) {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "Invalid date";
-
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+function shortDate(value: string) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-function getDaysLabel(days: number) {
+function daysLabel(days: number) {
   if (days < 0) return "Overdue";
-  if (days === 0) return "Due today";
-  if (days === 1) return "1 day left";
-  if (days <= 7) return `${days} days left`;
-  return `${days} days remaining`;
+  if (days === 0) return "Today";
+  if (days === 1) return "1 day";
+  return `${days} days`;
 }
 
-function getPercent(value: number, total: number) {
+function pct(value: number, total: number) {
   if (!total) return 0;
-  return Math.round((value / total) * 100);
+  return Math.max(Math.round((value / total) * 100), value > 0 ? 3 : 0);
 }
 
-function getMinBarWidth(value: number, total: number) {
-  if (!total || value <= 0) return 0;
-  return Math.max((value / total) * 100, 8);
-}
+const STATUS_COLORS: Record<string, string> = {
+  active: "bg-emerald-500",
+  draft: "bg-slate-400",
+  expired: "bg-rose-500",
+  terminated: "bg-amber-500",
+  renewed: "bg-blue-500",
+};
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -83,478 +71,328 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const [statsData, typeData, statusData, expiringData, activityData] =
-        await Promise.all([
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const [s, t, st, ex, ac] = await Promise.all([
           api.getDashboardStats(),
           api.getContractsByType(),
           api.getContractsByStatus(),
           api.getExpiringSoon(),
           api.getRecentActivity(),
         ]);
-
-      setStats(statsData);
-      setTypes(typeData);
-      setStatuses(statusData);
-      setExpiring(expiringData);
-      setActivity(activityData);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load dashboard data."
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadData();
+        setStats(s);
+        setTypes(t);
+        setStatuses(st);
+        setExpiring(ex);
+        setActivity(ac);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load dashboard.");
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
 
   const contractGroups = useMemo(
-    () =>
-      types.map((item) => ({
-        name: formatTypeLabel(item.type),
-        count: item.count,
-      })),
+    () => types.map((i) => ({ name: label(i.type), count: i.count })),
     [types]
   );
 
-  const totalContracts = stats?.total_contracts ?? 0;
-  const activeContracts = stats?.active_contracts ?? 0;
-  const pendingApprovals = stats?.pending_approvals ?? 0;
+  const total = stats?.total_contracts ?? 0;
+  const active = stats?.active_contracts ?? 0;
+  const pending = stats?.pending_approvals ?? 0;
   const highRisk = stats?.risk_summary.high ?? 0;
   const mediumRisk = stats?.risk_summary.medium ?? 0;
   const lowRisk = stats?.risk_summary.low ?? 0;
-  const totalRisk = lowRisk + mediumRisk + highRisk;
+  const totalRisk = highRisk + mediumRisk + lowRisk;
 
-  const topStatus = useMemo(() => {
-    if (!statuses.length) return null;
-    return [...statuses].sort((a, b) => b.count - a.count)[0];
-  }, [statuses]);
-
-  const cards = [
+  const kpis = [
     {
-      title: "Total Contracts",
-      value: totalContracts,
-      helper: "Across all repositories",
+      label: "Total contracts",
+      value: total,
       icon: FileText,
-      iconWrap:
-        "bg-gradient-to-br from-indigo-600 to-violet-500 text-white shadow-lg shadow-indigo-500/20",
-      accent: "text-indigo-600",
+      iconColor: "text-indigo-500",
+      iconBg: "bg-indigo-50",
+      sub: `${active} active`,
     },
     {
-      title: "Active Contracts",
-      value: activeContracts,
-      helper: "Currently in force",
+      label: "Active",
+      value: active,
       icon: CheckCircle2,
-      iconWrap:
-        "bg-gradient-to-br from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/20",
-      accent: "text-emerald-600",
+      iconColor: "text-emerald-500",
+      iconBg: "bg-emerald-50",
+      sub: total ? `${Math.round((active / total) * 100)}% of total` : "—",
     },
     {
-      title: "Pending Approvals",
-      value: pendingApprovals,
-      helper: "Awaiting stakeholder action",
+      label: "Pending approvals",
+      value: pending,
       icon: Clock3,
-      iconWrap:
-        "bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/20",
-      accent: "text-amber-600",
+      iconColor: "text-amber-500",
+      iconBg: "bg-amber-50",
+      sub: "awaiting action",
     },
     {
-      title: "High Risk Items",
+      label: "High risk",
       value: highRisk,
-      helper: "Need immediate review",
       icon: AlertTriangle,
-      iconWrap:
-        "bg-gradient-to-br from-rose-500 to-red-500 text-white shadow-lg shadow-rose-500/20",
-      accent: "text-rose-600",
+      iconColor: "text-rose-500",
+      iconBg: "bg-rose-50",
+      sub: totalRisk ? `${Math.round((highRisk / totalRisk) * 100)}% of analysed` : "not yet analysed",
     },
   ];
 
-  const ringSegments = useMemo(() => {
-    if (!totalRisk) {
-      return [
-        { key: "low", percent: 0, color: "#4F46E5" },
-        { key: "medium", percent: 0, color: "#A5B4FC" },
-        { key: "high", percent: 0, color: "#F43F5E" },
-      ];
-    }
-
-    return [
-      { key: "low", percent: (lowRisk / totalRisk) * 100, color: "#4F46E5" },
-      { key: "medium", percent: (mediumRisk / totalRisk) * 100, color: "#A5B4FC" },
-      { key: "high", percent: (highRisk / totalRisk) * 100, color: "#F43F5E" },
-    ];
-  }, [lowRisk, mediumRisk, highRisk, totalRisk]);
-
-  const radius = 78;
-  const circumference = 2 * Math.PI * radius;
-  let cumulativeOffset = 0;
+  const radius = 70;
+  const circ = 2 * Math.PI * radius;
+  let cumOffset = 0;
+  const riskSegments = totalRisk
+    ? [
+        { key: "low", count: lowRisk, color: "#6366f1" },
+        { key: "medium", count: mediumRisk, color: "#f59e0b" },
+        { key: "high", count: highRisk, color: "#f43f5e" },
+      ]
+    : [];
 
   return (
     <AppShell
-      title="Contract operations overview"
-      subtitle="Live overview of contracts, approvals, activity, and AI-powered risk signals."
+      title="Dashboard"
+      subtitle="Your contract portfolio at a glance."
       contractGroups={contractGroups}
     >
-      {error ? (
-        <div className="mb-6 rounded-3xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700 shadow-sm">
+      {error && (
+        <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
-      ) : null}
+      )}
 
-      <div className="space-y-6">
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {cards.map((card) => {
-            const Icon = card.icon;
-
+      <div className="space-y-5">
+        {/* KPI row */}
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {kpis.map((kpi) => {
+            const Icon = kpi.icon;
             return (
-              <Card
-                key={card.title}
-                className="overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
+              <div
+                key={kpi.label}
+                className="flex items-start gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
               >
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-3">
-                      <p className="text-sm font-medium text-slate-500">
-                        {card.title}
-                      </p>
-
-                      <div className="flex items-end gap-2">
-                        <h3 className="text-4xl font-semibold tracking-tight text-slate-900">
-                          {loading ? "..." : card.value}
-                        </h3>
-                        <span className={`pb-1 text-xs font-semibold ${card.accent}`}>
-                          Live
-                        </span>
-                      </div>
-
-                      <p className="text-sm text-slate-500">{card.helper}</p>
-                    </div>
-
-                    <div
-                      className={`flex h-12 w-12 items-center justify-center rounded-2xl ${card.iconWrap}`}
-                    >
-                      <Icon className="h-5 w-5" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${kpi.iconBg}`}>
+                  <Icon className={`h-4.5 w-4.5 ${kpi.iconColor}`} />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-slate-500">{kpi.label}</p>
+                  <p className="mt-1 text-3xl font-semibold tabular-nums text-slate-900">
+                    {loading ? "—" : kpi.value}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-400">{kpi.sub}</p>
+                </div>
+              </div>
             );
           })}
-        </section>
+        </div>
 
-        <section className="grid gap-6 xl:grid-cols-[1.45fr_0.95fr]">
-          <Card className="rounded-3xl border border-slate-200/80 bg-white shadow-sm">
-            <CardContent className="p-6">
-              <div className="mb-6 flex items-start justify-between gap-4">
-                <div>
-                  <div className="mb-2 flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-indigo-500" />
-                    <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                      Status snapshot
-                    </span>
-                  </div>
-                  <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
-                    Contract status overview
-                  </h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Real-time status distribution from your contract repository.
-                  </p>
-                </div>
+        {/* Middle row: status breakdown + risk ring */}
+        <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
+          {/* Status breakdown */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-[15px] font-semibold text-slate-900">Status breakdown</h2>
+            <p className="mt-0.5 text-xs text-slate-400">Distribution across all your contracts</p>
 
-                {topStatus ? (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right">
-                    <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                      Largest segment
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900">
-                      {formatTypeLabel(topStatus.status)}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {topStatus.count} contracts
-                    </p>
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="space-y-4">
-                {!loading && statuses.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                    No status data found.
-                  </div>
-                ) : null}
-
-                {statuses.map((item) => (
-                  <div
-                    key={item.status}
-                    className="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4"
-                  >
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <div>
-                        <p className="font-medium text-slate-900">
-                          {formatTypeLabel(item.status)}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {getPercent(item.count, totalContracts)}% of all contracts
-                        </p>
+            {loading ? (
+              <p className="mt-6 text-sm text-slate-400">Loading…</p>
+            ) : statuses.length === 0 ? (
+              <p className="mt-6 text-sm text-slate-400">No contracts yet.</p>
+            ) : (
+              <div className="mt-5 space-y-3">
+                {statuses.map((item) => {
+                  const barPct = pct(item.count, total);
+                  const dot = STATUS_COLORS[item.status.toLowerCase()] ?? "bg-slate-400";
+                  return (
+                    <div key={item.status}>
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`h-2 w-2 rounded-full shrink-0 ${dot}`} />
+                          <span className="text-sm font-medium text-slate-700">
+                            {label(item.status)}
+                          </span>
+                        </div>
+                        <span className="text-xs tabular-nums text-slate-500">
+                          {item.count} · {barPct}%
+                        </span>
                       </div>
-
-                      <Badge className="rounded-full bg-slate-900 px-3 py-1 text-white hover:bg-slate-900">
-                        {item.count}
-                      </Badge>
-                    </div>
-
-                    <div className="h-2.5 overflow-hidden rounded-full bg-slate-200">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-violet-500 to-blue-500"
-                        style={{
-                          width: `${getMinBarWidth(item.count, totalContracts)}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-3xl border border-slate-200/80 bg-white shadow-sm">
-            <CardContent className="p-6">
-              <div className="mb-6">
-                <div className="mb-2 flex items-center gap-2">
-                  <ShieldAlert className="h-4 w-4 text-violet-500" />
-                  <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                    AI risk summary
-                  </span>
-                </div>
-                <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
-                  Risk distribution
-                </h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Based on your backend AI analysis data.
-                </p>
-              </div>
-
-              <div className="flex flex-col items-center">
-                <div className="relative flex h-[270px] w-[270px] items-center justify-center">
-                  <svg
-                    viewBox="0 0 240 240"
-                    className="-rotate-90 h-[240px] w-[240px]"
-                  >
-                    <circle
-                      cx="120"
-                      cy="120"
-                      r={radius}
-                      fill="none"
-                      stroke="#E5E7EB"
-                      strokeWidth="24"
-                    />
-
-                    {ringSegments.map((segment) => {
-                      const dash = (segment.percent / 100) * circumference;
-                      const dashArray = `${dash} ${circumference}`;
-                      const dashOffset = -cumulativeOffset;
-                      cumulativeOffset += dash + 10;
-
-                      return (
-                        <circle
-                          key={segment.key}
-                          cx="120"
-                          cy="120"
-                          r={radius}
-                          fill="none"
-                          stroke={segment.color}
-                          strokeWidth="24"
-                          strokeLinecap="round"
-                          strokeDasharray={dashArray}
-                          strokeDashoffset={dashOffset}
+                      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className={`h-full rounded-full ${dot}`}
+                          style={{ width: `${barPct}%` }}
                         />
-                      );
-                    })}
-                  </svg>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
-                  <div className="absolute flex flex-col items-center justify-center text-center">
-                    <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
-                      Total
-                    </span>
-                    <span className="mt-1 text-5xl font-semibold tracking-tight text-slate-900">
-                      {loading ? "..." : totalRisk}
-                    </span>
-                    <span className="mt-1 text-sm text-slate-500">
-                      Analysed contracts
-                    </span>
-                  </div>
+          {/* Risk ring */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-start gap-1.5">
+              <ShieldAlert className="mt-0.5 h-4 w-4 text-slate-400" />
+              <div>
+                <h2 className="text-[15px] font-semibold text-slate-900">Risk profile</h2>
+                <p className="mt-0.5 text-xs text-slate-400">Based on AI analysis results</p>
+              </div>
+            </div>
+
+            {loading ? (
+              <p className="mt-6 text-sm text-slate-400">Loading…</p>
+            ) : (
+              <div className="mt-4 flex flex-col items-center">
+                {totalRisk === 0 ? (
+                  <p className="py-6 text-sm text-slate-400">No contracts analysed yet.</p>
+                ) : (
+                  <>
+                    <div className="relative flex h-[180px] w-[180px] items-center justify-center">
+                      <svg viewBox="0 0 200 200" className="-rotate-90 h-[180px] w-[180px]">
+                        <circle cx="100" cy="100" r={radius} fill="none" stroke="#f1f5f9" strokeWidth="20" />
+                        {riskSegments.map((seg) => {
+                          const dash = (seg.count / totalRisk) * circ;
+                          const gap = 6;
+                          const dashArray = `${Math.max(dash - gap, 0)} ${circ}`;
+                          const offset = -cumOffset;
+                          cumOffset += dash;
+                          return (
+                            <circle
+                              key={seg.key}
+                              cx="100" cy="100" r={radius}
+                              fill="none"
+                              stroke={seg.color}
+                              strokeWidth="20"
+                              strokeLinecap="round"
+                              strokeDasharray={dashArray}
+                              strokeDashoffset={offset}
+                            />
+                          );
+                        })}
+                      </svg>
+                      <div className="absolute text-center">
+                        <p className="text-3xl font-semibold tabular-nums text-slate-900">{totalRisk}</p>
+                        <p className="text-xs text-slate-400">analysed</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 w-full space-y-2">
+                      {[
+                        { key: "low", label: "Low", count: lowRisk, color: "bg-indigo-500" },
+                        { key: "medium", label: "Medium", count: mediumRisk, color: "bg-amber-400" },
+                        { key: "high", label: "High", count: highRisk, color: "bg-rose-500" },
+                      ].map((r) => (
+                        <div key={r.key} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`h-2 w-2 rounded-full ${r.color}`} />
+                            <span className="text-[13px] text-slate-600">{r.label} risk</span>
+                          </div>
+                          <span className="text-[13px] font-medium tabular-nums text-slate-800">
+                            {r.count} <span className="text-slate-400 font-normal">({pct(r.count, totalRisk)}%)</span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Bottom row: expiring + activity */}
+        <div className="grid gap-5 xl:grid-cols-[1.25fr_1fr]">
+          {/* Expiring contracts */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-[15px] font-semibold text-slate-900">Expiring within 30 days</h2>
+            <p className="mt-0.5 text-xs text-slate-400">Contracts that need attention soon</p>
+
+            <div className="mt-4 space-y-2">
+              {loading ? (
+                <p className="text-sm text-slate-400">Loading…</p>
+              ) : expiring.length === 0 ? (
+                <div className="flex items-center gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-400">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  No contracts expiring in the next 30 days.
                 </div>
-
-                <div className="mt-2 w-full space-y-3">
-                  {[
-                    {
-                      label: "Low risk",
-                      count: lowRisk,
-                      percent: getPercent(lowRisk, totalRisk),
-                      dot: "bg-indigo-600",
-                    },
-                    {
-                      label: "Medium risk",
-                      count: mediumRisk,
-                      percent: getPercent(mediumRisk, totalRisk),
-                      dot: "bg-indigo-300",
-                    },
-                    {
-                      label: "High risk",
-                      count: highRisk,
-                      percent: getPercent(highRisk, totalRisk),
-                      dot: "bg-rose-500",
-                    },
-                  ].map((item) => (
-                    <div
-                      key={item.label}
-                      className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+              ) : (
+                expiring.map((item) => (
+                  <Link
+                    key={item.id}
+                    to={`/contracts/${item.id}`}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/60 px-4 py-3 transition hover:border-slate-200 hover:bg-white"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-800">{item.title}</p>
+                      <p className="mt-0.5 text-xs text-slate-400">
+                        {label(item.contract_type)} · ends {shortDate(item.end_date)}
+                      </p>
+                    </div>
+                    <Badge
+                      className={`shrink-0 rounded-full px-2.5 text-xs ${
+                        item.days_remaining <= 7
+                          ? "bg-rose-100 text-rose-700"
+                          : item.days_remaining <= 14
+                          ? "bg-amber-100 text-amber-700"
+                          : "bg-blue-100 text-blue-700"
+                      }`}
                     >
-                      <div className="flex items-center gap-3">
-                        <span className={`h-3 w-3 rounded-full ${item.dot}`} />
-                        <div>
-                          <p className="text-sm font-medium text-slate-900">
-                            {item.label}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {item.count} contracts
-                          </p>
-                        </div>
-                      </div>
+                      {daysLabel(item.days_remaining)} left
+                    </Badge>
+                  </Link>
+                ))
+              )}
+            </div>
+          </div>
 
-                      <span className="text-sm font-semibold text-slate-700">
-                        {item.percent}%
-                      </span>
-                    </div>
-                  ))}
-                </div>
+          {/* Recent activity */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h2 className="text-[15px] font-semibold text-slate-900">Recent activity</h2>
+                <p className="mt-0.5 text-xs text-slate-400">Latest contract updates</p>
               </div>
-            </CardContent>
-          </Card>
-        </section>
+              <TrendingUp className="h-4 w-4 text-slate-300" />
+            </div>
 
-        <section className="grid gap-6 xl:grid-cols-[1.25fr_0.95fr]">
-          <Card className="rounded-3xl border border-slate-200/80 bg-white shadow-sm">
-            <CardContent className="p-6">
-              <div className="mb-6 flex items-start justify-between gap-4">
-                <div>
-                  <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
-                    Upcoming and due documents
-                  </h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Pulled directly from contracts expiring within the next 30 days.
-                  </p>
-                </div>
-
-                <div className="hidden rounded-2xl bg-indigo-50 px-3 py-2 text-right sm:block">
-                  <p className="text-xs uppercase tracking-[0.2em] text-indigo-500">
-                    Focus
-                  </p>
-                  <p className="text-sm font-semibold text-indigo-700">
-                    Time-sensitive actions
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                {!loading && expiring.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                    No active contracts are expiring soon.
-                  </div>
-                ) : null}
-
-                {expiring.map((item) => (
-                  <div
+            <div className="mt-4 space-y-2">
+              {loading ? (
+                <p className="text-sm text-slate-400">Loading…</p>
+              ) : activity.length === 0 ? (
+                <p className="text-sm text-slate-400">No recent activity.</p>
+              ) : (
+                activity.map((item) => (
+                  <Link
                     key={item.id}
-                    className="group flex items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50/70 px-5 py-4 transition-all duration-200 hover:border-indigo-200 hover:bg-indigo-50/40"
+                    to={`/contracts/${item.id}`}
+                    className="group flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/60 px-4 py-3 transition hover:border-slate-200 hover:bg-white"
                   >
-                    <div className="flex items-start gap-3">
-                      <span className="mt-2 h-3 w-3 rounded-full bg-violet-500 shadow-sm shadow-violet-400/50" />
-
-                      <div>
-                        <p className="font-semibold text-slate-900">{item.title}</p>
-                        <p className="mt-1 text-sm text-slate-500">
-                          {formatTypeLabel(item.contract_type)} · ends{" "}
-                          {formatDate(item.end_date)}
-                        </p>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-800">{item.title}</p>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-600">
+                          {label(item.status)}
+                        </span>
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
+                          {label(item.workflow_stage)}
+                        </span>
                       </div>
                     </div>
-
-                    <div className="flex shrink-0 flex-col items-end gap-2">
-                      <Badge className="rounded-full bg-slate-900 px-3 py-1 text-white hover:bg-slate-900">
-                        {getDaysLabel(item.days_remaining)}
-                      </Badge>
-                      <span className="text-xs text-slate-400 group-hover:text-indigo-500">
-                        Action needed
-                      </span>
+                    <div className="flex shrink-0 items-center gap-1 text-[11px] text-slate-400 group-hover:text-slate-600">
+                      <span>{shortDate(item.updated_at)}</span>
+                      <ArrowRight className="h-3 w-3" />
                     </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-3xl border border-slate-200/80 bg-white shadow-sm">
-            <CardContent className="p-6">
-              <div className="mb-6 flex items-start justify-between gap-4">
-                <div>
-                  <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
-                    Recent activity
-                  </h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Latest contract updates from your backend.
-                  </p>
-                </div>
-
-                <TrendingUp className="h-5 w-5 text-slate-400" />
-              </div>
-
-              <div className="space-y-4">
-                {!loading && activity.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                    No recent activity found.
-                  </div>
-                ) : null}
-
-                {activity.map((item) => (
-                  <div
-                    key={item.id}
-                    className="rounded-2xl border border-slate-200 bg-white px-4 py-4 transition-all duration-200 hover:border-slate-300 hover:shadow-sm"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold text-slate-900">
-                          {item.title}
-                        </p>
-
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <Badge className="rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-50">
-                            {formatTypeLabel(item.status)}
-                          </Badge>
-                          <Badge className="rounded-full bg-slate-100 text-slate-700 hover:bg-slate-100">
-                            {formatTypeLabel(item.workflow_stage)}
-                          </Badge>
-                        </div>
-                      </div>
-
-                      <div className="flex shrink-0 items-center gap-1 text-xs text-slate-400">
-                        <span>{formatDate(item.updated_at)}</span>
-                        <ArrowRight className="h-3.5 w-3.5" />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </section>
+                  </Link>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </AppShell>
   );

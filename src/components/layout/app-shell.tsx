@@ -1,12 +1,10 @@
 import { Link, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import {
-  Bell,
   CalendarDays,
   CheckCheck,
   FileText,
   LayoutDashboard,
-  Search,
   Shield,
   ShieldAlert,
   Sparkles,
@@ -15,14 +13,13 @@ import {
   LockKeyhole,
   Workflow,
   UploadCloud,
+  Bell,
+  ChevronRight,
 } from "lucide-react";
 import { UserButton, useUser } from "@clerk/clerk-react";
 import { cn } from "@/lib/utils";
 
-type ContractGroup = {
-  name: string;
-  count: number;
-};
+type ContractGroup = { name: string; count: number };
 
 type AppShellProps = {
   title: string;
@@ -32,9 +29,79 @@ type AppShellProps = {
   children: React.ReactNode;
 };
 
-function getInitials(title?: string) {
-  if (!title) return "C";
-  return title.trim().charAt(0).toUpperCase() || "C";
+type NavItem = { label: string; href: string; icon: React.ElementType };
+type NavSection = { label: string; items: NavItem[] };
+
+const MAIN_SECTIONS: NavSection[] = [
+  {
+    label: "",
+    items: [{ label: "Dashboard", href: "/", icon: LayoutDashboard }],
+  },
+  {
+    label: "Contracts",
+    items: [
+      { label: "All Contracts", href: "/contracts", icon: FileText },
+      { label: "Upload", href: "/upload", icon: UploadCloud },
+    ],
+  },
+  {
+    label: "Intelligence",
+    items: [
+      { label: "AI Analysis", href: "/ai-analysis", icon: Sparkles },
+      { label: "Conflict Detection", href: "/conflict-detection", icon: Shield },
+      { label: "Risk Analysis", href: "/risk-analysis", icon: ShieldAlert },
+    ],
+  },
+  {
+    label: "Tools",
+    items: [{ label: "Calendar", href: "/calendar", icon: CalendarDays }],
+  },
+];
+
+const ADMIN_SECTION: NavSection = {
+  label: "Administration",
+  items: [
+    { label: "Overview", href: "/admin", icon: LockKeyhole },
+    { label: "Users", href: "/admin/users", icon: Users },
+    { label: "Workflows", href: "/admin/workflows", icon: Workflow },
+    { label: "Approvals", href: "/admin/approvals", icon: CheckCheck },
+    { label: "Audit Logs", href: "/admin/audit", icon: ScrollText },
+    { label: "Notifications", href: "/admin/notifications", icon: Bell },
+  ],
+};
+
+const MANAGER_SECTION: NavSection = {
+  label: "Management",
+  items: [
+    { label: "Workflows", href: "/admin/workflows", icon: Workflow },
+    { label: "Approvals", href: "/admin/approvals", icon: CheckCheck },
+  ],
+};
+
+function NavLink({ item, isActive }: { item: NavItem; isActive: boolean }) {
+  const Icon = item.icon;
+  return (
+    <Link
+      to={item.href}
+      className={cn(
+        "group flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] font-medium transition-colors",
+        isActive
+          ? "bg-white/12 text-white"
+          : "text-slate-400 hover:bg-white/6 hover:text-slate-200"
+      )}
+    >
+      <Icon
+        className={cn(
+          "h-[15px] w-[15px] shrink-0 transition-colors",
+          isActive ? "text-white" : "text-slate-500 group-hover:text-slate-300"
+        )}
+      />
+      <span className="truncate">{item.label}</span>
+      {isActive && (
+        <ChevronRight className="ml-auto h-3 w-3 shrink-0 text-slate-400" />
+      )}
+    </Link>
+  );
 }
 
 export function AppShell({
@@ -64,225 +131,150 @@ export function AppShell({
       setAdminMode(false);
       return;
     }
-
     const stored = localStorage.getItem("admin_mode");
-    if (stored === "true") {
-      setAdminMode(true);
-    }
-
+    if (stored === "true") setAdminMode(true);
     if (location.pathname.startsWith("/admin")) {
       localStorage.setItem("admin_mode", "true");
       setAdminMode(true);
     }
   }, [isAdminOrManager, location.pathname]);
 
-  const mainNavigation = [
-    {
-      label: "Dashboard",
-      href: "/",
-      icon: LayoutDashboard,
-    },
-    {
-      label: "Contracts",
-      href: "/contracts",
-      icon: FileText,
-    },
-    {
-      label: "Upload Contract",
-      href: "/upload",
-      icon: UploadCloud,
-    },
-    {
-      label: "AI Analysis",
-      href: "/ai-analysis",
-      icon: Sparkles,
-    },
-    {
-      label: "Conflict Detection",
-      href: "/conflict-detection",
-      icon: Shield,
-    },
-    {
-      label: "Calendar",
-      href: "/calendar",
-      icon: CalendarDays,
-    },
-    {
-      label: "Risk Analysis",
-      href: "/risk-analysis",
-      icon: ShieldAlert,
-    },
-  ];
-
-  // Full admin nav — visible to admins only
-  const adminNavigation = [
-    { label: "Admin Dashboard", href: "/admin", icon: LockKeyhole },
-    { label: "User Management", href: "/admin/users", icon: Users },
-    { label: "Workflows", href: "/admin/workflows", icon: Workflow },
-    { label: "Approvals", href: "/admin/approvals", icon: CheckCheck },
-    { label: "Audit Logs", href: "/admin/audit", icon: ScrollText },
-    { label: "Notifications & Alerts", href: "/admin/notifications", icon: Bell },
-  ];
-
-  // Reduced nav for managers — workflow & approval management only
-  const managerNavigation = [
-    { label: "Workflows", href: "/admin/workflows", icon: Workflow },
-    { label: "Approvals", href: "/admin/approvals", icon: CheckCheck },
-  ];
-
-  const showAdminSection = isAdminOrManager && adminMode;
-  const activeNavigation = isAdmin ? adminNavigation : managerNavigation;
-
   const handleAdminClick = () => {
     localStorage.setItem("admin_mode", "true");
     setAdminMode(true);
   };
 
-  return (
-    <div className="min-h-screen bg-slate-100">
-      <div className="flex min-h-screen">
-        <aside className="hidden w-[260px] shrink-0 bg-[#07153A] text-white lg:flex lg:flex-col">
-          <div className="border-b border-white/10 px-5 py-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-indigo-400 via-blue-500 to-cyan-400 text-lg font-semibold text-white">
-                {getInitials(title)}
-              </div>
+  const extraSection = adminMode
+    ? isAdmin
+      ? ADMIN_SECTION
+      : MANAGER_SECTION
+    : null;
 
-              <div className="min-w-0">
-                <p className="truncate text-[16px] font-semibold tracking-tight">
-                  clause
+  const isActive = (href: string) =>
+    href === "/" ? location.pathname === "/" : location.pathname.startsWith(href);
+
+  const firstName = user?.firstName || user?.username || "there";
+
+  return (
+    <div className="flex min-h-screen bg-[#f4f5f7]">
+      {/* ── Sidebar ─────────────────────────────────────────── */}
+      <aside className="hidden w-[240px] shrink-0 flex-col bg-[#111827] lg:flex">
+        {/* Brand */}
+        <div className="flex items-center gap-2.5 px-5 py-5">
+          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-indigo-500 text-[11px] font-bold text-white">
+            CL
+          </div>
+          <span className="text-[15px] font-semibold tracking-tight text-white">
+            clause
+          </span>
+          <span className="ml-auto rounded-full bg-indigo-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-indigo-300">
+            beta
+          </span>
+        </div>
+
+        {/* User pill */}
+        <div className="mx-3 mb-4 flex items-center gap-2.5 rounded-lg bg-white/5 px-3 py-2.5">
+          <UserButton
+            afterSignOutUrl="/sign-in"
+            appearance={{ elements: { avatarBox: "h-6 w-6" } }}
+          />
+          <div className="min-w-0">
+            <p className="truncate text-[12.5px] font-medium text-slate-200">
+              {firstName}
+            </p>
+            <p className="truncate text-[11px] text-slate-500 capitalize">{role || "user"}</p>
+          </div>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 overflow-y-auto px-3 pb-4">
+          {MAIN_SECTIONS.map((section, si) => (
+            <div key={si} className={si > 0 ? "mt-5" : ""}>
+              {section.label && (
+                <p className="mb-1 px-3 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                  {section.label}
                 </p>
-                <p className="text-xs text-blue-100/80">
-                  Contract lifecycle workspace
-                </p>
+              )}
+              <div className="space-y-0.5">
+                {section.items.map((item) => (
+                  <NavLink key={item.href} item={item} isActive={isActive(item.href)} />
+                ))}
               </div>
+            </div>
+          ))}
+
+          {extraSection && (
+            <div className="mt-5 border-t border-white/8 pt-5">
+              <p className="mb-1 px-3 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                {extraSection.label}
+              </p>
+              <div className="space-y-0.5">
+                {extraSection.items.map((item) => (
+                  <NavLink key={item.href} item={item} isActive={isActive(item.href)} />
+                ))}
+              </div>
+            </div>
+          )}
+        </nav>
+
+        {/* Sidebar footer: contract type counts */}
+        {contractGroups.length > 0 && (
+          <div className="border-t border-white/8 px-4 py-4">
+            <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+              Contract types
+            </p>
+            <div className="space-y-1.5">
+              {contractGroups.slice(0, 5).map((g) => (
+                <div key={g.name} className="flex items-center justify-between gap-2">
+                  <span className="truncate text-[12px] text-slate-400">{g.name}</span>
+                  <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-medium text-slate-300">
+                    {g.count}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
+        )}
+      </aside>
 
-          <nav className="overflow-y-auto px-3 py-4">
-            <div className="space-y-2">
-              {mainNavigation.map((item) => {
-                const isActive =
-                  item.href === "/"
-                    ? location.pathname === item.href
-                    : location.pathname.startsWith(item.href);
-
-                const Icon = item.icon;
-
-                return (
-                  <Link
-                    key={item.href}
-                    to={item.href}
-                    className={cn(
-                      "flex items-center gap-3 rounded-[20px] px-4 py-3 text-[14px] transition",
-                      isActive
-                        ? "bg-white text-slate-950 shadow-sm"
-                        : "text-blue-50 hover:bg-white/8"
-                    )}
-                  >
-                    <Icon className="h-[18px] w-[18px] shrink-0" />
-                    <span className="truncate">{item.label}</span>
-                  </Link>
-                );
-              })}
+      {/* ── Main area ────────────────────────────────────────── */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Header */}
+        <header className="border-b border-slate-200 bg-white">
+          <div className="flex items-center justify-between gap-4 px-6 py-4">
+            <div className="min-w-0">
+              <h1 className="text-[22px] font-semibold leading-tight tracking-tight text-slate-900">
+                {title}
+              </h1>
+              {subtitle && (
+                <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p>
+              )}
             </div>
 
-            {showAdminSection ? (
-              <div className="mt-8">
-                <p className="px-3 text-[11px] uppercase tracking-[0.28em] text-blue-100/65">
-                  {isAdmin ? "Admin" : "Management"}
-                </p>
+            <div className="flex shrink-0 items-center gap-2">
+              {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
 
-                <div className="mt-3 space-y-2">
-                  {activeNavigation.map((item) => {
-                    const isActive = location.pathname.startsWith(item.href);
-                    const Icon = item.icon;
-
-                    return (
-                      <Link
-                        key={item.href}
-                        to={item.href}
-                        className={cn(
-                          "flex items-center gap-3 rounded-[20px] px-4 py-3 text-[14px] transition",
-                          isActive
-                            ? "bg-white text-slate-950 shadow-sm"
-                            : "text-blue-50 hover:bg-white/8"
-                        )}
-                      >
-                        <Icon className="h-[18px] w-[18px] shrink-0" />
-                        <span className="truncate">{item.label}</span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : null}
-          </nav>
-        </aside>
-
-        <div className="flex min-w-0 flex-1 flex-col">
-          <header className="border-b border-slate-200 bg-white">
-            <div className="flex flex-col gap-4 px-6 py-5 xl:flex-row xl:items-start xl:justify-between">
-              <div className="min-w-0">
-                <p className="text-sm text-slate-500">Welcome back</p>
-                <h1 className="text-2xl font-semibold leading-tight tracking-tight text-slate-950 md:text-3xl">
-                  {title}
-                </h1>
-                {subtitle ? (
-                  <p className="mt-2 max-w-2xl text-sm text-slate-500 md:text-base">
-                    {subtitle}
-                  </p>
-                ) : null}
-              </div>
-
-              <div className="flex flex-col items-stretch gap-3 xl:min-w-[720px] xl:flex-row xl:items-center xl:justify-end">
-                {actions ? (
-                  <div className="flex flex-wrap gap-2">{actions}</div>
-                ) : null}
-
-                <div className="flex items-center justify-end gap-3">
-                  <div className="hidden h-12 min-w-[420px] items-center gap-3 rounded-[18px] border border-slate-200 bg-white px-4 shadow-sm xl:flex">
-                    <Search className="h-4 w-4 text-slate-400" />
-                    <span className="text-sm text-slate-400">
-                      Search contracts, parties, clauses...
-                    </span>
-                  </div>
-
-                  {isAdminOrManager ? (
-                    <Link
-                      to={isAdmin ? "/admin" : "/admin/workflows"}
-                      onClick={handleAdminClick}
-                      className={cn(
-                        "inline-flex h-12 items-center gap-2 rounded-[18px] border px-4 text-sm font-medium shadow-sm transition",
-                        location.pathname.startsWith("/admin")
-                          ? "border-slate-900 bg-slate-900 text-white"
-                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                      )}
-                    >
-                      <LockKeyhole className="h-4 w-4" />
-                      <span>{isAdmin ? "Admin" : "Manage"}</span>
-                    </Link>
-                  ) : null}
-
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm">
-                    <UserButton
-                      afterSignOutUrl="/sign-in"
-                      appearance={{
-                        elements: {
-                          avatarBox: "h-8 w-8",
-                        },
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
+              {isAdminOrManager && (
+                <Link
+                  to={isAdmin ? "/admin" : "/admin/workflows"}
+                  onClick={handleAdminClick}
+                  className={cn(
+                    "inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-[13px] font-medium transition",
+                    location.pathname.startsWith("/admin")
+                      ? "border-slate-800 bg-slate-900 text-white"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                  )}
+                >
+                  <LockKeyhole className="h-3.5 w-3.5" />
+                  {isAdmin ? "Admin" : "Manage"}
+                </Link>
+              )}
             </div>
-          </header>
+          </div>
+        </header>
 
-          <main className="flex-1 bg-slate-100 px-5 py-5 md:px-6 md:py-6">
-            {children}
-          </main>
-        </div>
+        {/* Page content */}
+        <main className="flex-1 px-6 py-6">{children}</main>
       </div>
     </div>
   );

@@ -26,10 +26,10 @@ import UploadPipelinePage from "./pages/upload-pipeline-page";
 import { AuthBridge } from "./components/auth-bridge";
 
 const AUTH_FEATURES = [
-  { icon: "📄", text: "Centralise all your contracts in one place" },
-  { icon: "🤖", text: "AI-powered risk analysis and clause extraction" },
-  { icon: "✅", text: "Streamlined approval workflows" },
-  { icon: "🔔", text: "Automated expiry alerts via email" },
+  { label: "Contract lifecycle", text: "Draft, review, approve and store — all in one place" },
+  { label: "AI-powered analysis", text: "Risk scoring, clause extraction and conflict detection" },
+  { label: "Approval workflows", text: "Route contracts to the right people automatically" },
+  { label: "Expiry alerts", text: "Never miss a renewal with automated email reminders" },
 ];
 
 function AuthLayout({ children }: { children: React.ReactNode }) {
@@ -64,13 +64,13 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
             </p>
           </div>
 
-          <ul className="space-y-3">
+          <ul className="space-y-4">
             {AUTH_FEATURES.map((f) => (
-              <li key={f.text} className="flex items-center gap-3">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10 text-sm backdrop-blur-sm">
-                  {f.icon}
+              <li key={f.label} className="flex flex-col gap-0.5">
+                <span className="text-xs font-semibold uppercase tracking-wider text-violet-300">
+                  {f.label}
                 </span>
-                <span className="text-sm text-white/80">{f.text}</span>
+                <span className="text-sm text-white/60">{f.text}</span>
               </li>
             ))}
           </ul>
