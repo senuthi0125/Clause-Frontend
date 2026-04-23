@@ -8,9 +8,7 @@ import {
   LayoutDashboard,
   Layers,
   Menu,
-  Monitor,
   Moon,
-  Search,
   Shield,
   ShieldAlert,
   Sparkles,
@@ -45,13 +43,12 @@ function ThemeToggle() {
   const { theme, setTheme } = useTheme();
 
   const options: {
-    value: "light" | "dark" | "system";
+    value: "light" | "dark";
     icon: React.ElementType;
     label: string;
   }[] = [
     { value: "light", icon: Sun, label: "Light" },
     { value: "dark", icon: Moon, label: "Dark" },
-    { value: "system", icon: Monitor, label: "System" },
   ];
 
   return (
@@ -62,13 +59,13 @@ function ThemeToggle() {
           onClick={() => setTheme(value)}
           title={label}
           className={cn(
-            "flex h-7 w-7 items-center justify-center rounded-xl transition-all duration-200",
+            "flex h-8 w-8 items-center justify-center rounded-xl transition-all duration-200",
             theme === value
               ? "bg-white text-slate-900 shadow-sm dark:bg-white/15 dark:text-white"
               : "text-slate-400 hover:bg-white/60 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-white/8 dark:hover:text-slate-300"
           )}
         >
-          <Icon className="h-3.5 w-3.5" />
+          <Icon className="h-4 w-4" />
         </button>
       ))}
     </div>
@@ -138,7 +135,7 @@ export function AppShell({
     setAdminMode(true);
   };
 
-  const IconNavLink = ({
+  const DesktopNavLink = ({
     item,
     onClick,
   }: {
@@ -241,14 +238,14 @@ export function AppShell({
 
       <nav className="flex min-h-0 flex-1 flex-col items-center gap-3 overflow-y-auto px-2 pb-3">
         {mainNavigation.map((item) => (
-          <IconNavLink key={item.href} item={item} />
+          <DesktopNavLink key={item.href} item={item} />
         ))}
 
         {showAdminSection && (
           <>
             <div className="my-2 h-px w-14 bg-white/12" />
             {activeNavigation.map((item) => (
-              <IconNavLink key={item.href} item={item} />
+              <DesktopNavLink key={item.href} item={item} />
             ))}
           </>
         )}
@@ -413,7 +410,7 @@ export function AppShell({
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/92 backdrop-blur-md dark:border-white/8 dark:bg-[#0F1320]/95">
-            <div className="flex items-center gap-4 px-5 py-3.5 xl:px-6">
+            <div className="flex items-center justify-between gap-4 px-5 py-3.5 xl:px-6">
               <button
                 onClick={() => setMobileOpen(true)}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/8 lg:hidden"
@@ -427,14 +424,7 @@ export function AppShell({
                 </p>
               </div>
 
-              <div className="hidden flex-1 lg:block">
-                <div className="flex h-10 max-w-[460px] items-center gap-3 rounded-2xl border border-slate-200/80 bg-slate-50 px-4 shadow-sm transition-all focus-within:border-indigo-300 focus-within:ring-2 focus-within:ring-indigo-100 dark:border-white/8 dark:bg-white/5 dark:focus-within:border-indigo-500/50 dark:focus-within:ring-indigo-500/10">
-                  <Search className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500" />
-                  <span className="text-[13px] text-slate-400 dark:text-slate-500">
-                    Search contracts, parties, clauses…
-                  </span>
-                </div>
-              </div>
+              <div className="hidden flex-1 lg:block" />
 
               <div className="flex items-center gap-2.5">
                 <ThemeToggle />
