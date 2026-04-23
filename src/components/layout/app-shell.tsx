@@ -26,6 +26,7 @@ import {
 import { UserButton, useUser } from "@clerk/clerk-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/components/theme-provider";
+import { useRole } from "@/hooks/use-role";
 
 type ContractGroup = {
   name: string;
@@ -83,19 +84,10 @@ export function AppShell({
 }: AppShellProps) {
   const location = useLocation();
   const { user } = useUser();
+  const { role, isAdmin, isManager, isAdminOrManager } = useRole();
   const [adminMode, setAdminMode] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   void contractGroups;
-
-  const role = String(
-    user?.publicMetadata?.role || user?.unsafeMetadata?.role || ""
-  )
-    .trim()
-    .toLowerCase();
-
-  const isAdmin = role === "admin";
-  const isManager = role === "manager";
-  const isAdminOrManager = isAdmin || isManager;
 
   useEffect(() => {
     if (!isAdminOrManager) {

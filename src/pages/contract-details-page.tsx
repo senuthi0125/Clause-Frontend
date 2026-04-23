@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
+import { useRole } from "@/hooks/use-role";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import UnderlineExtension from "@tiptap/extension-underline";
@@ -955,9 +956,7 @@ export default function ContractDetailsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useUser();
-
-  const role = String(user?.publicMetadata?.role || user?.unsafeMetadata?.role || "").trim().toLowerCase();
-  const isAdminOrManager = role === "admin" || role === "manager";
+  const { isAdminOrManager } = useRole();
   const currentUserClerkId = user?.id ?? "";
 
   const [contract, setContract]   = useState<Contract | null>(null);
