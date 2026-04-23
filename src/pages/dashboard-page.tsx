@@ -268,7 +268,7 @@ function PinnedContractsSection({
           >
             <Link
               to={`/contracts/${contract.id}`}
-              className="flex items-center gap-2 text-sm font-semibold text-slate-900 transition-colors"
+              className="flex items-center gap-2 text-sm font-semibold text-slate-900 transition-colors dark:text-white"
               onMouseEnter={(e) => (e.currentTarget.style.color = t.text)}
               onMouseLeave={(e) => (e.currentTarget.style.color = "")}
             >
@@ -567,7 +567,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <section className="rounded-3xl border border-slate-200/80 dark:border-white/8 bg-white dark:bg-[#131829] p-6 shadow-sm">
+        <section className="rounded-3xl border border-violet-100 bg-violet-50/60 dark:border-violet-500/20 dark:bg-violet-500/10 p-6 shadow-sm">
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
               <div className="mb-1.5 flex items-center gap-2">
@@ -654,7 +654,7 @@ export default function DashboardPage() {
         </section>
 
         <section className="grid gap-6 xl:grid-cols-[1.45fr_0.95fr]">
-          <Card className="rounded-3xl border border-slate-200/80 dark:border-white/8 bg-card shadow-sm">
+          <Card className="rounded-3xl border border-violet-100 bg-violet-50/60 dark:border-violet-500/20 dark:bg-violet-500/10 shadow-sm">
             <CardContent className="p-6">
               <div className="mb-6 flex items-start justify-between gap-4">
                 <div>
@@ -672,7 +672,7 @@ export default function DashboardPage() {
                   </p>
                 </div>
                 {topStatus ? (
-                  <div className="rounded-2xl border border-slate-200 dark:border-white/8 bg-slate-50 dark:bg-white/5 px-4 py-3 text-right">
+                  <div className="rounded-2xl border border-violet-100 dark:border-violet-500/20 bg-violet-100/70 dark:bg-violet-500/15 px-4 py-3 text-right">
                     <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
                       Largest segment
                     </p>
@@ -688,7 +688,7 @@ export default function DashboardPage() {
 
               <div className="space-y-4">
                 {!loading && statuses.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                  <div className="rounded-2xl border border-dashed border-violet-100 dark:border-violet-500/20 bg-violet-100/60 dark:bg-violet-500/12 px-4 py-8 text-center text-sm text-slate-500">
                     No status data found.
                   </div>
                 ) : null}
@@ -696,7 +696,7 @@ export default function DashboardPage() {
                 {statuses.map((item) => (
                   <div
                     key={item.status}
-                    className="rounded-2xl border border-slate-200/80 dark:border-white/8 bg-slate-50/70 dark:bg-white/4 p-4"
+                    className="rounded-2xl border border-violet-100 dark:border-violet-500/20 bg-violet-100/55 dark:bg-violet-500/12 p-4"
                   >
                     <div className="mb-3 flex items-center justify-between gap-3">
                       <div>
@@ -731,7 +731,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-3xl border border-slate-200/80 dark:border-white/8 bg-card shadow-sm">
+          <Card className="rounded-3xl border border-violet-100 bg-violet-50/60 dark:border-violet-500/20 dark:bg-violet-500/10 shadow-sm">
             <CardContent className="p-6">
               <div className="mb-6">
                 <div className="mb-2 flex items-center gap-2">
@@ -756,7 +756,7 @@ export default function DashboardPage() {
                       cy="120"
                       r={radius}
                       fill="none"
-                      stroke="#E5E7EB"
+                      stroke={dark ? "rgba(255,255,255,0.08)" : "#E5E7EB"}
                       strokeWidth="24"
                     />
                     {(() => {
@@ -821,7 +821,7 @@ export default function DashboardPage() {
                   ].map((item) => (
                     <div
                       key={item.label}
-                      className="flex items-center justify-between rounded-2xl border border-slate-200 dark:border-white/8 bg-slate-50 dark:bg-white/4 px-4 py-3"
+                      className="flex items-center justify-between rounded-2xl border border-violet-100 dark:border-violet-500/20 bg-violet-100/55 dark:bg-violet-500/12 px-4 py-3"
                     >
                       <div className="flex items-center gap-3">
                         <span
@@ -829,7 +829,7 @@ export default function DashboardPage() {
                           style={{ backgroundColor: item.color }}
                         />
                         <div>
-                          <p className="text-sm font-medium text-slate-900">
+                          <p className="text-sm font-medium text-slate-900 dark:text-white">
                             {item.label}
                           </p>
                           <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -849,7 +849,7 @@ export default function DashboardPage() {
         </section>
 
         <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-          <Card className="rounded-3xl border border-slate-200/80 dark:border-white/8 bg-card shadow-sm">
+          <Card className="rounded-3xl border border-violet-100 dark:border-violet-500/20 bg-violet-50/60 dark:bg-violet-500/10 shadow-sm">
             <CardContent className="p-6">
               <div className="mb-5 flex items-start justify-between gap-4">
                 <div>
@@ -868,7 +868,7 @@ export default function DashboardPage() {
               {loading ? (
                 <div className="h-48 w-full animate-pulse rounded-xl bg-slate-200" />
               ) : typeChartData.length === 0 ? (
-                <div className="flex h-48 items-center justify-center rounded-xl border border-dashed border-slate-200 text-sm text-slate-500">
+                <div className="flex h-48 items-center justify-center rounded-xl border border-dashed border-violet-100 dark:border-violet-500/20 bg-violet-100/55 dark:bg-violet-500/12 text-sm text-slate-500 dark:text-slate-400">
                   No type data available.
                 </div>
               ) : (
@@ -915,7 +915,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-3xl border border-slate-200/80 dark:border-white/8 bg-card shadow-sm">
+          <Card className="rounded-3xl border border-violet-100 dark:border-violet-500/20 bg-violet-50/60 dark:bg-violet-500/10 shadow-sm">
             <CardContent className="p-6">
               <div className="mb-6 flex items-start justify-between gap-4">
                 <div>
@@ -945,7 +945,7 @@ export default function DashboardPage() {
 
               <div className="space-y-4">
                 {!loading && expiring.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                  <div className="rounded-2xl border border-dashed border-violet-100 dark:border-violet-500/20 bg-violet-100/55 dark:bg-violet-500/12 px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
                     No active contracts are expiring soon.
                   </div>
                 ) : null}
@@ -958,7 +958,7 @@ export default function DashboardPage() {
                   return (
                     <div
                       key={item.id}
-                      className="group flex items-start justify-between gap-4 rounded-2xl border border-slate-200 dark:border-white/8 bg-slate-50/70 dark:bg-white/4 px-5 py-4 transition-all duration-200"
+                      className="group flex items-start justify-between gap-4 rounded-2xl border border-violet-100 dark:border-violet-500/20 bg-violet-100/55 dark:bg-violet-500/12 px-5 py-4 transition-all duration-200"
                     >
                       <div className="flex items-start gap-3">
                         <span
@@ -1013,7 +1013,7 @@ export default function DashboardPage() {
         </section>
 
         <section>
-          <Card className="rounded-3xl border border-slate-200/80 dark:border-white/8 bg-card shadow-sm">
+          <Card className="rounded-3xl border border-violet-100 dark:border-violet-500/20 bg-violet-50/60 dark:bg-violet-500/10 shadow-sm">
             <CardContent className="p-6">
               <div className="mb-6 flex items-start justify-between gap-4">
                 <div>
@@ -1029,7 +1029,7 @@ export default function DashboardPage() {
 
               <div className="space-y-4">
                 {!loading && activity.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                  <div className="rounded-2xl border border-dashed border-violet-100 dark:border-violet-500/20 bg-violet-100/55 dark:bg-violet-500/12 px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
                     No recent activity found.
                   </div>
                 ) : null}
@@ -1043,7 +1043,7 @@ export default function DashboardPage() {
                     return (
                       <div
                         key={item.id}
-                        className="rounded-2xl border border-slate-200 dark:border-white/8 bg-white dark:bg-white/4 px-4 py-4 transition-all duration-200 hover:border-slate-300 dark:hover:border-white/15 hover:shadow-sm"
+                        className="rounded-2xl border border-violet-100 dark:border-violet-500/20 bg-violet-100/50 dark:bg-violet-500/12 px-4 py-4 transition-all duration-200 hover:border-violet-200 dark:hover:border-violet-400/30 hover:shadow-sm"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
@@ -1060,7 +1060,7 @@ export default function DashboardPage() {
                               >
                                 {formatTypeLabel(item.status)}
                               </Badge>
-                              <Badge className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700 hover:bg-slate-100">
+                              <Badge className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700 hover:bg-slate-100 dark:bg-white/10 dark:text-slate-200">
                                 {formatTypeLabel(item.workflow_stage)}
                               </Badge>
                             </div>
