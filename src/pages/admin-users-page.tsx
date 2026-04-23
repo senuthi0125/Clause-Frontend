@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search, UserX, UserCheck, User } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { AppCard } from "@/components/ui/app-card";
+import { AppBadge } from "@/components/ui/app-badge";
+import { AppInput } from "@/components/ui/app-input";
+import { AppEmptyState } from "@/components/ui/app-empty-state";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import type { Contract, UserRole } from "@/types/api";
@@ -39,28 +41,32 @@ function formatDate(value?: string | null) {
   });
 }
 
-function roleBadgeClass(role?: string | null) {
+function roleBadgeVariant(
+  role?: string | null
+): "rose" | "amber" | "slate" | "blue" {
   switch ((role || "").toLowerCase()) {
     case "admin":
-      return "bg-red-100 text-red-700";
+      return "rose";
     case "manager":
-      return "bg-amber-100 text-amber-700";
+      return "amber";
     case "viewer":
-      return "bg-slate-100 text-slate-700";
+      return "slate";
     default:
-      return "bg-blue-100 text-blue-700";
+      return "blue";
   }
 }
 
-function statusBadgeClass(status?: string | null) {
+function statusBadgeVariant(
+  status?: string | null
+): "emerald" | "slate" {
   switch ((status || "").toLowerCase()) {
     case "active":
-      return "bg-green-100 text-green-700";
+      return "emerald";
     case "inactive":
     case "deactivated":
-      return "bg-slate-100 text-slate-700";
+      return "slate";
     default:
-      return "bg-slate-100 text-slate-700";
+      return "slate";
   }
 }
 
@@ -89,9 +95,7 @@ export default function AdminUsersPage() {
           : []
       );
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load users."
-      );
+      setError(err instanceof Error ? err.message : "Failed to load users.");
       setUsers([]);
     } finally {
       setLoading(false);
@@ -144,9 +148,7 @@ export default function AdminUsersPage() {
       await api.changeUserRole(userId, role);
       await loadData();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to change role."
-      );
+      setError(err instanceof Error ? err.message : "Failed to change role.");
     } finally {
       setBusyUserId(null);
     }
@@ -159,7 +161,9 @@ export default function AdminUsersPage() {
       await api.deactivateUser(userId);
       await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to deactivate user.");
+      setError(
+        err instanceof Error ? err.message : "Failed to deactivate user."
+      );
     } finally {
       setBusyUserId(null);
     }
@@ -185,88 +189,96 @@ export default function AdminUsersPage() {
       contractGroups={contractGroups}
     >
       {error && (
-        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
           {error}
         </div>
       )}
 
-      <Card className="border border-slate-200 bg-white shadow-sm">
-        <CardContent className="p-6">
-          <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="relative w-full max-w-md">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by name, email, or role"
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-11 pr-4 text-sm outline-none"
-              />
-            </div>
-
-            <p className="text-sm text-slate-500">
-              {filteredUsers.length} total users
-            </p>
+      <AppCard tone="soft">
+        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="relative w-full max-w-md">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <AppInput
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, email, or role"
+              className="h-11 pl-11"
+            />
           </div>
 
-          {loading ? (
-            <p className="text-sm text-slate-500">Loading users...</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 text-left">
-                    <th colSpan={2} className="pb-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      User
-                    </th>
-                    <th className="pb-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      Role
-                    </th>
-                    <th className="pb-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      Status
-                    </th>
-                    <th className="pb-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      Joined
-                    </th>
-                    <th className="pb-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {filteredUsers.length} total users
+          </p>
+        </div>
 
-                <tbody>
-                  {filteredUsers.map((user) => {
-                    const initials = (user.full_name || user.email || "?")
-                      .split(" ")
-                      .slice(0, 2)
-                      .map((p) => p[0]?.toUpperCase() ?? "")
-                      .join("");
+        {loading ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Loading users...
+          </p>
+        ) : filteredUsers.length === 0 ? (
+          <AppEmptyState title="No users found." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[980px] border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 text-left dark:border-white/10">
+                  <th
+                    colSpan={2}
+                    className="pb-4 text-xs font-semibold uppercase tracking-wider text-slate-400"
+                  >
+                    User
+                  </th>
+                  <th className="pb-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    Role
+                  </th>
+                  <th className="pb-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    Status
+                  </th>
+                  <th className="pb-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    Joined
+                  </th>
+                  <th className="pb-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
 
-                    return (
+              <tbody>
+                {filteredUsers.map((user) => {
+                  const initials = (user.full_name || user.email || "?")
+                    .split(" ")
+                    .slice(0, 2)
+                    .map((p) => p[0]?.toUpperCase() ?? "")
+                    .join("");
+
+                  return (
                     <tr
                       key={user.id}
-                      className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/60 transition-colors"
+                      className="border-b border-slate-100 transition-colors last:border-b-0 hover:bg-violet-50/40 dark:border-white/6 dark:hover:bg-violet-500/5"
                     >
-                      {/* Identity: avatar + name + email */}
                       <td className="py-4 pr-4" colSpan={2}>
                         <div className="flex items-center gap-3">
-                          {/* Avatar */}
                           {user.image_url ? (
                             <img
                               src={user.image_url}
                               alt={user.full_name || "avatar"}
-                              className="h-9 w-9 rounded-full object-cover ring-2 ring-slate-100 shrink-0"
+                              className="h-9 w-9 shrink-0 rounded-full object-cover ring-2 ring-slate-100 dark:ring-white/10"
                             />
                           ) : (
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-100 text-sm font-semibold text-violet-700 ring-2 ring-slate-100">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-100 text-sm font-semibold text-violet-700 ring-2 ring-slate-100 dark:bg-violet-500/15 dark:text-violet-300 dark:ring-white/10">
                               {initials || <User className="h-4 w-4" />}
                             </div>
                           )}
-                          {/* Name + email stacked */}
+
                           <div className="min-w-0">
-                            <p className="font-semibold text-slate-900 truncate">
-                              {user.full_name || <span className="italic text-slate-400 font-normal">No name</span>}
+                            <p className="truncate font-semibold text-slate-900 dark:text-white">
+                              {user.full_name || (
+                                <span className="font-normal italic text-slate-400">
+                                  No name
+                                </span>
+                              )}
                             </p>
-                            <p className="text-sm text-slate-500 truncate">
+                            <p className="truncate text-sm text-slate-500 dark:text-slate-400">
                               {user.email || "—"}
                             </p>
                           </div>
@@ -274,18 +286,21 @@ export default function AdminUsersPage() {
                       </td>
 
                       <td className="py-4 pr-4">
-                        <Badge className={`${roleBadgeClass(user.role)} capitalize`}>
+                        <AppBadge
+                          variant={roleBadgeVariant(user.role)}
+                          className="capitalize"
+                        >
                           {user.role || "user"}
-                        </Badge>
+                        </AppBadge>
                       </td>
 
                       <td className="py-4 pr-4">
-                        <Badge className={statusBadgeClass(user.status)}>
+                        <AppBadge variant={statusBadgeVariant(user.status)}>
                           {formatLabel(user.status) || "Unknown"}
-                        </Badge>
+                        </AppBadge>
                       </td>
 
-                      <td className="py-4 pr-4 text-sm text-slate-600">
+                      <td className="py-4 pr-4 text-sm text-slate-600 dark:text-slate-300">
                         {formatDate(user.created_at)}
                       </td>
 
@@ -297,7 +312,7 @@ export default function AdminUsersPage() {
                               changeRole(user.id, e.target.value as UserRole)
                             }
                             disabled={busyUserId === user.id}
-                            className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-violet-400 disabled:opacity-50"
+                            className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-violet-400 disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-white"
                           >
                             <option value="user">User</option>
                             <option value="viewer">Viewer</option>
@@ -305,13 +320,14 @@ export default function AdminUsersPage() {
                             <option value="admin">Admin</option>
                           </select>
 
-                          {(user.status || "active").toLowerCase() === "inactive" ? (
+                          {(user.status || "active").toLowerCase() ===
+                          "inactive" ? (
                             <Button
                               size="sm"
                               variant="outline"
                               onClick={() => activate(user.id)}
                               disabled={busyUserId === user.id}
-                              className="rounded-xl text-green-700 border-green-200 hover:bg-green-50"
+                              className="rounded-xl border-green-200 text-green-700 hover:bg-green-50 dark:border-green-500/20 dark:text-green-300 dark:hover:bg-green-500/10"
                             >
                               <UserCheck className="mr-1.5 h-3.5 w-3.5" />
                               Activate
@@ -322,7 +338,7 @@ export default function AdminUsersPage() {
                               variant="outline"
                               onClick={() => deactivate(user.id)}
                               disabled={busyUserId === user.id}
-                              className="rounded-xl text-red-600 border-red-200 hover:bg-red-50"
+                              className="rounded-xl border-red-200 text-red-600 hover:bg-red-50 dark:border-red-500/20 dark:text-red-300 dark:hover:bg-red-500/10"
                             >
                               <UserX className="mr-1.5 h-3.5 w-3.5" />
                               Deactivate
@@ -331,25 +347,13 @@ export default function AdminUsersPage() {
                         </div>
                       </td>
                     </tr>
-                    );
-                  })}
-
-                  {filteredUsers.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={6}
-                        className="py-8 text-center text-sm text-slate-500"
-                      >
-                        No users found.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </AppCard>
     </AppShell>
   );
 }
