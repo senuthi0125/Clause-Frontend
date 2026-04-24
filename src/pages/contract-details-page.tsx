@@ -1,19 +1,32 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
+  Bold,
   Bot,
   CalendarDays,
+  Check,
   CheckCircle2,
   CircleDollarSign,
   Download,
   Eye,
   FileText,
+  Heading1,
+  Heading2,
+  Heading3,
+  Italic,
+  Layers,
+  List,
+  ListOrdered,
+  Loader2,
+  Plus,
+  Save,
   FileEdit,
   Loader2,
   Send,
   ShieldCheck,
   Tag,
   Trash2,
+  Underline,
   Workflow,
   X,
   XCircle,
@@ -25,12 +38,18 @@ import {
 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
+import { useRole } from "@/hooks/use-role";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import UnderlineExtension from "@tiptap/extension-underline";
+import TextAlign from "@tiptap/extension-text-align";
+import Placeholder from "@tiptap/extension-placeholder";
 import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api, API_BASE_URL } from "@/lib/api";
-import type { Contract, Workflow as WorkflowType, Approval } from "@/types/api";
+import type { Contract, Workflow as WorkflowType, Approval, WorkflowTemplate } from "@/types/api";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -143,15 +162,142 @@ function DocumentPanel({ contractId }: { contractId: string }) {
     if (mode === "libreoffice") loadWopiUrl();
   }, [mode, loadWopiUrl]);
 
-  // ── Reliable download: programmatic anchor element ──────────────────────
-  function handleDownload() {
-    const a = document.createElement("a");
-    a.href = `${API_BASE_URL}/api/documents/download/${contractId}`;
-    a.setAttribute("download", "");
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  async function handleExport(fmt: "docx" | "pdf") {
+    // Save first so export uses latest content
+    if (editor) await api.saveDocumentHtml(contractId, editor.getHTML(), contractTitle);
+    setExporting(fmt);
+    try {
+      await api.exportDocument(contractId, fmt, `${contractTitle}.${fmt}`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Export failed.");
+    } finally { setExporting(null); }
   }
+
+  if (!editor) return null;
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#0F1320]">
+      {/* ── Toolbar ── */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2 dark:border-white/8 dark:bg-white/4">
+        {/* Formatting tools */}
+        <div className="flex items-center gap-0.5">
+          <ToolbarButton active={editor.isActive("bold")}      onClick={() => editor.chain().focus().toggleBold().run()}      title="Bold (Ctrl+B)">
+            <Bold className="h-3.5 w-3.5" />
+          </ToolbarButton>
+          <ToolbarButton active={editor.isActive("italic")}    onClick={() => editor.chain().focus().toggleItalic().run()}    title="Italic (Ctrl+I)">
+            <Italic className="h-3.5 w-3.5" />
+          </ToolbarButton>
+          <ToolbarButton active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()} title="Underline (Ctrl+U)">
+            <Underline className="h-3.5 w-3.5" />
+          </ToolbarButton>
+
+          <div className="mx-2 h-5 w-px bg-slate-200 dark:bg-white/10" />
+
+          <ToolbarButton active={editor.isActive("heading", { level: 1 })} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} title="Heading 1">
+            <Heading1 className="h-3.5 w-3.5" />
+          </ToolbarButton>
+          <ToolbarButton active={editor.isActive("heading", { level: 2 })} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} title="Heading 2">
+            <Heading2 className="h-3.5 w-3.5" />
+          </ToolbarButton>
+          <ToolbarButton active={editor.isActive("heading", { level: 3 })} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} title="Heading 3">
+            <Heading3 className="h-3.5 w-3.5" />
+          </ToolbarButton>
+
+          <div className="mx-2 h-5 w-px bg-slate-200 dark:bg-white/10" />
+
+          <ToolbarButton active={editor.isActive("bulletList")}  onClick={() => editor.chain().focus().toggleBulletList().run()}  title="Bullet list">
+            <List className="h-3.5 w-3.5" />
+          </ToolbarButton>
+          <ToolbarButton active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()} title="Numbered list">
+            <ListOrdered className="h-3.5 w-3.5" />
+          </ToolbarButton>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2">
+          {saveMsg && (
+            <span className={`text-xs font-medium ${saveMsg.startsWith("✓") ? "text-green-600" : "text-red-600"}`}>
+              {saveMsg}
+            </span>
+          )}
+          <Button size="sm" variant="outline" className="rounded-xl" onClick={() => handleSave(false)} disabled={saving}>
+            {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
+            {saving ? "Saving…" : "Save"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-xl border-blue-200 text-blue-700 hover:bg-blue-50"
+            onClick={() => handleExport("docx")}
+            disabled={!!exporting}
+          >
+            {exporting === "docx"
+              ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              : <Download className="mr-1.5 h-3.5 w-3.5" />
+            }
+            {exporting === "docx" ? "Exporting…" : "Download DOCX"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-xl border-rose-200 text-rose-700 hover:bg-rose-50"
+            onClick={() => handleExport("pdf")}
+            disabled={!!exporting}
+          >
+            {exporting === "pdf"
+              ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              : <Download className="mr-1.5 h-3.5 w-3.5" />
+            }
+            {exporting === "pdf" ? "Exporting…" : "Download PDF"}
+          </Button>
+        </div>
+      </div>
+
+      {/* ── Auto-save indicator ── */}
+      <div className="flex items-center justify-between border-b border-slate-50 bg-white px-5 py-1.5 dark:border-white/5 dark:bg-transparent">
+        <span className="text-[11px] text-slate-400">
+          Auto-saves every 2 seconds while you type
+        </span>
+        <span className="text-[11px] text-slate-400">
+          Ctrl+B Bold · Ctrl+I Italic · Ctrl+U Underline
+        </span>
+      </div>
+
+      {/* ── Editor canvas ── */}
+      <EditorContent editor={editor} />
+    </div>
+  );
+}
+
+// ─── Document panel (handles load + original file preview) ────────────────────
+
+function DocumentPanel({ contractId, contractTitle }: { contractId: string; contractTitle: string }) {
+  const [loading,     setLoading]     = useState(true);
+  const [hasFile,     setHasFile]     = useState(false);
+  const [fileType,    setFileType]    = useState("");
+  const [initialHtml, setInitialHtml] = useState("");
+  const [showOrig,    setShowOrig]    = useState(false);   // toggle to see original uploaded file
+  const viewUrl = `${API_BASE_URL}/api/documents/view/${contractId}`;
+  const isPdf   = fileType === ".pdf";
+  const isDocx  = fileType === ".docx" || fileType === ".doc";
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Load HTML for the editor and file metadata simultaneously
+      const [htmlRes, textRes] = await Promise.all([
+        api.getDocumentHtml(contractId).catch(() => ({ html: "", title: "" })),
+        api.getDocumentText(contractId).catch(() => ({ text: "", file_type: "", has_file: false })),
+      ]);
+      setHasFile(textRes.has_file);
+      setFileType(textRes.file_type || "");
+      setInitialHtml(htmlRes.html || "");
+    } finally {
+      setLoading(false);
+    }
+  }, [contractId]);
+
+  useEffect(() => { load(); }, [load]);
 
   if (loading) return (
     <div className="flex items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white py-16">
@@ -204,7 +350,7 @@ function DocumentPanel({ contractId }: { contractId: string }) {
             {fileType || "file"}
           </Badge>
         </div>
-      </div>
+      )}
 
       {/* LibreOffice (Collabora Online) */}
       {mode === "libreoffice" && (
@@ -265,7 +411,38 @@ function DocumentPanel({ contractId }: { contractId: string }) {
           )}
         </>
       )}
+
+      {/* Rich text editor — always shown */}
+      <RichTextEditor
+        contractId={contractId}
+        contractTitle={contractTitle}
+        initialHtml={initialHtml}
+      />
     </div>
+  );
+}
+
+function OriginalDocxViewer({ viewUrl }: { viewUrl: string }) {
+  const [html, setHtml]     = useState("");
+  const [loading, setLoad]  = useState(true);
+  useEffect(() => {
+    fetch(viewUrl)
+      .then((r) => r.arrayBuffer())
+      .then(async (buf) => {
+        const mammoth = await import("mammoth");
+        const result  = await mammoth.convertToHtml({ arrayBuffer: buf });
+        setHtml(result.value);
+      })
+      .catch(() => setHtml("<p style='color:#888'>Could not render — download to view.</p>"))
+      .finally(() => setLoad(false));
+  }, [viewUrl]);
+  if (loading) return <div className="flex items-center gap-2 p-8 text-slate-400"><Loader2 className="h-5 w-5 animate-spin" /> Rendering…</div>;
+  return (
+    <div
+      className="prose prose-slate max-w-none overflow-auto px-10 py-8"
+      style={{ maxHeight: "60vh" }}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
   );
 }
 
@@ -355,6 +532,146 @@ function SendApprovalPanel({
   );
 }
 
+// ─── Workflow template picker modal ──────────────────────────────────────────
+
+const DEFAULT_STEP_DESCRIPTION =
+  "Request & Initiation → Authoring → AI Risk Analysis → Review & Negotiation → Approval → Execution & Signing → Storage → Monitoring → Renewal / Expiration";
+
+function WorkflowTemplatePicker({
+  onConfirm,
+  onClose,
+}: {
+  onConfirm: (template: WorkflowTemplate | null) => void;
+  onClose: () => void;
+}) {
+  const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [selected, setSelected]   = useState<string | "default">("default");
+
+  useEffect(() => {
+    api.listWorkflowTemplates()
+      .then((list) => setTemplates(list))
+      .catch(() => setTemplates([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const chosenTemplate = templates.find((t) => t.id === selected) ?? null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+          <div className="flex items-center gap-2">
+            <Layers className="h-5 w-5 text-indigo-500" />
+            <h2 className="font-semibold text-slate-900">Choose Workflow Template</h2>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Options */}
+        <div className="max-h-72 space-y-2 overflow-y-auto p-4">
+          {/* Default 9-step option */}
+          <button
+            onClick={() => setSelected("default")}
+            className={`flex w-full items-start gap-3 rounded-xl border p-4 text-left transition-all ${
+              selected === "default"
+                ? "border-indigo-500 bg-indigo-50"
+                : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+            }`}
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-100">
+              <Workflow className="h-4 w-4 text-indigo-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-slate-900">Default (9 steps)</p>
+              <p className="mt-0.5 text-xs text-slate-500 leading-relaxed">{DEFAULT_STEP_DESCRIPTION}</p>
+            </div>
+            {selected === "default" && (
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-indigo-600" />
+            )}
+          </button>
+
+          {/* Custom templates */}
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 py-4 text-sm text-slate-400">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading templates…
+            </div>
+          ) : templates.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-sm text-slate-400">
+              No custom templates yet.{" "}
+              <Link to="/admin/workflow-templates" className="text-indigo-500 underline hover:text-indigo-600">
+                Create one
+              </Link>
+            </div>
+          ) : (
+            templates.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setSelected(t.id)}
+                className={`flex w-full items-start gap-3 rounded-xl border p-4 text-left transition-all ${
+                  selected === t.id
+                    ? "border-indigo-500 bg-indigo-50"
+                    : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                }`}
+              >
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-100">
+                  <Layers className="h-4 w-4 text-violet-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-slate-900">{t.name}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {t.steps.length} steps
+                    {t.description ? ` — ${t.description}` : ""}
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {t.steps.slice(0, 5).map((s, i) => (
+                      <span key={i} className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">
+                        {s.name}
+                      </span>
+                    ))}
+                    {t.steps.length > 5 && (
+                      <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-400">
+                        +{t.steps.length - 5} more
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {selected === t.id && (
+                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-indigo-600" />
+                )}
+              </button>
+            ))
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between border-t border-slate-100 px-6 py-4">
+          <p className="text-xs text-slate-400">
+            {selected === "default"
+              ? "9-step standard workflow will be used"
+              : `"${chosenTemplate?.name}" — ${chosenTemplate?.steps.length} steps`}
+          </p>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="rounded-xl" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="rounded-xl"
+              onClick={() => onConfirm(chosenTemplate)}
+            >
+              <Plus className="mr-1.5 h-3.5 w-3.5" /> Start Workflow
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Workflow status card ─────────────────────────────────────────────────────
 
 function WorkflowCard({
@@ -366,14 +683,27 @@ function WorkflowCard({
   contractId: string;
   onWorkflowCreated: () => void;
 }) {
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
+  const [creating, setCreating]     = useState(false);
+  const [error, setError]           = useState<string | null>(null);
   const latest = workflows[0] ?? null;
 
-  async function startWorkflow() {
-    setCreating(true); setError(null);
+  async function handleConfirm(template: WorkflowTemplate | null) {
+    setCreating(true); setError(null); setShowPicker(false);
     try {
-      await api.createWorkflow({ contract_id: contractId, name: "Contract Review Workflow" });
+      const payload: Record<string, unknown> = {
+        contract_id: contractId,
+        name: template ? template.name : "Contract Review Workflow",
+      };
+      if (template?.steps?.length) {
+        payload.steps = template.steps.map((s, i) => ({
+          step_number: s.step_number ?? i + 1,
+          name: s.name,
+          step_type: s.step_type,
+          description: s.description ?? null,
+        }));
+      }
+      await api.createWorkflow(payload);
       onWorkflowCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start workflow.");
@@ -381,79 +711,101 @@ function WorkflowCard({
   }
 
   return (
-    <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Workflow className="h-5 w-5 text-slate-500" /> Workflow
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {error && <p className="text-xs text-red-600">{error}</p>}
+    <>
+      {showPicker && (
+        <WorkflowTemplatePicker
+          onConfirm={handleConfirm}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
 
-        {!latest ? (
-          <div className="space-y-3">
-            <p className="text-sm text-slate-500">No workflow started yet.</p>
-            <Button size="sm" variant="outline" className="w-full rounded-xl" onClick={startWorkflow} disabled={creating}>
-              {creating ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Workflow className="mr-2 h-3.5 w-3.5" />}
-              {creating ? "Starting…" : "Start Workflow"}
-            </Button>
-          </div>
-        ) : (
-          <>
-            {/* Status + step indicator */}
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-slate-800">{latest.name || "Review Workflow"}</p>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  Step {latest.current_step} of {latest.steps?.length ?? 9}
+      <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Workflow className="h-5 w-5 text-slate-500" /> Workflow
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {error && <p className="text-xs text-red-600">{error}</p>}
+
+          {!latest ? (
+            <div className="space-y-3">
+              <p className="text-sm text-slate-500">No workflow started yet.</p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full rounded-xl"
+                onClick={() => setShowPicker(true)}
+                disabled={creating}
+              >
+                {creating ? (
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Workflow className="mr-2 h-3.5 w-3.5" />
+                )}
+                {creating ? "Starting…" : "Start Workflow"}
+              </Button>
+            </div>
+          ) : (
+            <>
+              {/* Status + step indicator */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{latest.name || "Review Workflow"}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Step {latest.current_step} of {latest.steps?.length ?? 9}
+                  </p>
+                </div>
+                <Badge className={badgeClass(latest.status)}>{fmt(latest.status)}</Badge>
+              </div>
+
+              {/* Current step name */}
+              <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Current Step</p>
+                <p className="mt-0.5 text-sm font-semibold text-slate-800">
+                  {latest.steps?.find((s) => s.step_number === latest.current_step)?.name
+                    ?? STEP_LABELS[latest.current_step]
+                    ?? `Step ${latest.current_step}`}
                 </p>
               </div>
-              <Badge className={badgeClass(latest.status)}>{fmt(latest.status)}</Badge>
-            </div>
 
-            {/* Current step name */}
-            <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Current Step</p>
-              <p className="mt-0.5 text-sm font-semibold text-slate-800">
-                {STEP_LABELS[latest.current_step] ?? `Step ${latest.current_step}`}
+              {/* Mini step progress bar */}
+              <div className="flex items-center gap-1">
+                {(latest.steps?.length
+                  ? latest.steps
+                  : Array.from({ length: 9 }, (_, i) => ({ step_number: i + 1, status: "pending" as const }))
+                ).map((step) => {
+                  const isDone     = step.status === "completed";
+                  const isCurrent  = step.step_number === latest.current_step;
+                  const isRejected = step.status === "rejected";
+                  return (
+                    <div
+                      key={step.step_number}
+                      title={"name" in step ? (step as { name: string }).name : STEP_LABELS[step.step_number] ?? `Step ${step.step_number}`}
+                      className={`h-2 flex-1 rounded-full transition-all ${
+                        isRejected ? "bg-red-400"
+                        : isDone    ? "bg-green-500"
+                        : isCurrent ? "bg-blue-500"
+                        : "bg-slate-200"
+                      }`}
+                    />
+                  );
+                })}
+              </div>
+              <p className="text-right text-[10px] text-slate-400">
+                {latest.steps?.filter((s) => s.status === "completed").length ?? 0} / {latest.steps?.length ?? 9} steps completed
               </p>
-            </div>
 
-            {/* Mini step progress dots */}
-            <div className="flex items-center gap-1">
-              {Array.from({ length: latest.steps?.length ?? 9 }, (_, i) => {
-                const stepNum = i + 1;
-                const stepData = latest.steps?.find((s) => s.step_number === stepNum);
-                const isDone    = stepData?.status === "completed";
-                const isCurrent = stepNum === latest.current_step;
-                const isRejected = stepData?.status === "rejected";
-                return (
-                  <div
-                    key={stepNum}
-                    title={STEP_LABELS[stepNum] ?? `Step ${stepNum}`}
-                    className={`h-2 flex-1 rounded-full transition-all ${
-                      isRejected ? "bg-red-400"
-                      : isDone    ? "bg-green-500"
-                      : isCurrent ? "bg-blue-500"
-                      : "bg-slate-200"
-                    }`}
-                  />
-                );
-              })}
-            </div>
-            <p className="text-right text-[10px] text-slate-400">
-              {latest.steps?.filter((s) => s.status === "completed").length ?? 0} / {latest.steps?.length ?? 9} steps completed
-            </p>
-
-            <Button asChild size="sm" variant="outline" className="w-full rounded-xl">
-              <Link to={`/workflows/${latest.id}`}>
-                Open workflow <ChevronRight className="ml-1 h-3.5 w-3.5" />
-              </Link>
-            </Button>
-          </>
-        )}
-      </CardContent>
-    </Card>
+              <Button asChild size="sm" variant="outline" className="w-full rounded-xl">
+                <Link to={`/workflows/${latest.id}`}>
+                  Open workflow <ChevronRight className="ml-1 h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </>
   );
 }
 
@@ -646,9 +998,7 @@ export default function ContractDetailsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useUser();
-
-  const role = String(user?.publicMetadata?.role || user?.unsafeMetadata?.role || "").trim().toLowerCase();
-  const isAdminOrManager = role === "admin" || role === "manager";
+  const { isAdminOrManager } = useRole();
   const currentUserClerkId = user?.id ?? "";
 
   const [contract, setContract]   = useState<Contract | null>(null);
@@ -769,7 +1119,7 @@ export default function ContractDetailsPage() {
           </div>
 
           {/* ── Document viewer / editor ──────────────────────────────────── */}
-          <DocumentPanel contractId={contract.id} />
+          <DocumentPanel contractId={contract.id} contractTitle={contract.title} />
 
           {/* ── Details + sidebar ─────────────────────────────────────────── */}
           <div className="grid gap-6 xl:grid-cols-[1.7fr_0.8fr]">

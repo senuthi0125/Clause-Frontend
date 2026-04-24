@@ -322,6 +322,56 @@ export type AuditLogResponse = {
   total_pages: number;
 };
 
+// ─── User Preferences ────────────────────────────────────────
+
+export type WidgetVisibility = {
+  total_contracts?: boolean;
+  active_contracts?: boolean;
+  pending_approvals?: boolean;
+  high_risk?: boolean;
+};
+
+export type PinnedContract = {
+  id: string;
+  title: string;
+  status?: string;
+};
+
+export type UserPreferences = {
+  widget_visibility: WidgetVisibility;
+  default_contract_filter: string;
+  pinned_contracts: PinnedContract[];
+  accent_color: string;
+};
+
+// ─── Workflow Templates ───────────────────────────────────────────────────────
+
+export type WorkflowTemplateStep = {
+  step_number: number;
+  name: string;
+  step_type: "review" | "approval" | "signing" | "notification" | "ai_analysis";
+  description?: string | null;
+};
+
+export type WorkflowTemplate = {
+  id: string;
+  name: string;
+  description?: string | null;
+  steps: WorkflowTemplateStep[];
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+};
+
+// ─── Contract Lifecycle Stats ─────────────────────────────────────────────────
+
+export type LifecycleStats = {
+  pending_approval: number;
+  pending_negotiation: number;
+  pending_signing: number;
+  waiting_to_active: number;
+  became_active: number;
+  upcoming_renewals: number;
 // ─── Reports ─────────────────────────────────────────────
 
 export type ReportDimension =
