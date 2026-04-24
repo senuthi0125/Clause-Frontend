@@ -13,6 +13,9 @@ import type {
   ContractsResponse,
   DashboardStats,
   DraftResponse,
+  ReportDefinition,
+  ReportPreset,
+  ReportResult,
   Template,
   TemplatesResponse,
   UserRole,
@@ -284,6 +287,11 @@ export const api = {
       `/api/documents/text/${contractId}`
     ),
 
+  getWopiUrl: (contractId: string) =>
+    request<{ editor_url: string; file_type: string; filename: string }>(
+      `/api/documents/wopi-url/${contractId}`
+    ),
+
   saveDocumentText: (contractId: string, text: string) =>
     request<{ message: string }>(`/api/documents/text/${contractId}`, {
       method: "PUT",
@@ -420,6 +428,39 @@ export const api = {
       `/api/notifications/send-expiry-alerts?dry_run=${dryRun}`,
       { method: "POST" }
     ),
+
+  // ── Reports ─────────────────────────────────────────────────────────────────
+  runReport: (definition: ReportDefinition) =>
+    request<ReportResult>("/api/reports/run", {
+      method: "POST",
+      body: JSON.stringify(definition),
+    }),
+
+  getReportPresets: () => request<ReportPreset[]>("/api/reports/presets"),
+
+  downloadReportBlob: async (
+    definition: ReportDefinition,
+    format: "csv" | "pdf",
+    title = "CLAUSE Report"
+  ): Promise<{ blob: Blob; filename: string }> => {
+    const token = await resolveToken();
+    const res = await fetch(`${API_BASE_URL}/api/reports/export`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ definition, format, title }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new ApiError(`Export failed (${res.status})`, res.status, text);
+    }
+    const disposition = res.headers.get("content-disposition") ?? "";
+    const match = disposition.match(/filename=([^\s;]+)/);
+    const filename = match?.[1] ?? `report.${format}`;
+    return { blob: await res.blob(), filename };
+  },
 
   listAuditLogs: (
     params: {

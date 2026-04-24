@@ -6,11 +6,10 @@ import {
   CheckCircle2,
   CircleDollarSign,
   Download,
-  Edit3,
   Eye,
   FileText,
+  FileEdit,
   Loader2,
-  Save,
   Send,
   ShieldCheck,
   Tag,
@@ -82,29 +81,30 @@ const STEP_LABELS: Record<number, string> = {
 
 // ─── Document viewer / editor ─────────────────────────────────────────────────
 
-type ViewMode = "preview" | "edit";
+type ViewMode = "preview" | "libreoffice";
 
 function DocumentPanel({ contractId }: { contractId: string }) {
   const [mode, setMode]         = useState<ViewMode>("preview");
   const [fileType, setFileType] = useState("");
   const [hasFile, setHasFile]   = useState(false);
   const [text, setText]         = useState("");
-  const [editText, setEditText] = useState("");
   const [docxHtml, setDocxHtml] = useState("");
   const [loading, setLoading]   = useState(true);
-  const [saving, setSaving]     = useState(false);
-  const [saveMsg, setSaveMsg]   = useState<string | null>(null);
   const [docxLoading, setDocxLoading] = useState(false);
+  const [wopiUrl, setWopiUrl]   = useState<string | null>(null);
+  const [wopiLoading, setWopiLoading] = useState(false);
+  const [wopiError, setWopiError] = useState<string | null>(null);
   const viewUrl = `${API_BASE_URL}/api/documents/view/${contractId}`;
   const isPdf  = fileType === ".pdf";
   const isDocx = fileType === ".docx" || fileType === ".doc";
   const isTxt  = fileType === ".txt" || fileType === ".rtf" || fileType === ".odt";
+  const canLibreOffice = isDocx || fileType === ".odt";
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     api.getDocumentText(contractId)
-      .then((r) => { if (!cancelled) { setFileType(r.file_type || ""); setHasFile(r.has_file); setText(r.text || ""); setEditText(r.text || ""); }})
+      .then((r) => { if (!cancelled) { setFileType(r.file_type || ""); setHasFile(r.has_file); setText(r.text || ""); }})
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -125,17 +125,23 @@ function DocumentPanel({ contractId }: { contractId: string }) {
 
   useEffect(() => { if (isDocx && mode === "preview") loadDocxHtml(); }, [isDocx, mode, loadDocxHtml]);
 
-  async function handleSave() {
-    if (!editText.trim()) return;
-    setSaving(true); setSaveMsg(null);
+  const loadWopiUrl = useCallback(async () => {
+    if (wopiUrl || wopiLoading) return;
+    setWopiLoading(true);
+    setWopiError(null);
     try {
-      await api.saveDocumentText(contractId, editText);
-      setText(editText);
-      setSaveMsg("✓ Saved");
-      setTimeout(() => setSaveMsg(null), 3000);
-    } catch { setSaveMsg("✗ Save failed — try again"); }
-    finally { setSaving(false); }
-  }
+      const data = await api.getWopiUrl(contractId);
+      setWopiUrl(data.editor_url);
+    } catch (err) {
+      setWopiError(err instanceof Error ? err.message : "Could not load LibreOffice editor.");
+    } finally {
+      setWopiLoading(false);
+    }
+  }, [contractId, wopiUrl, wopiLoading]);
+
+  useEffect(() => {
+    if (mode === "libreoffice") loadWopiUrl();
+  }, [mode, loadWopiUrl]);
 
   // ── Reliable download: programmatic anchor element ──────────────────────
   function handleDownload() {
@@ -173,29 +179,24 @@ function DocumentPanel({ contractId }: { contractId: string }) {
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-5 py-3">
         <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1">
-          {(["preview", "edit"] as ViewMode[]).map((m) => (
-            <button key={m} onClick={() => setMode(m)}
+          <button onClick={() => setMode("preview")}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+              mode === "preview" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            <Eye className="h-3.5 w-3.5" /> Preview
+          </button>
+          {canLibreOffice && (
+            <button onClick={() => setMode("libreoffice")}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                mode === m ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+                mode === "libreoffice" ? "bg-indigo-600 text-white" : "text-slate-600 hover:bg-slate-100"
               }`}
             >
-              {m === "preview" ? <Eye className="h-3.5 w-3.5" /> : <Edit3 className="h-3.5 w-3.5" />}
-              {m === "preview" ? "Preview" : "Edit"}
+              <FileEdit className="h-3.5 w-3.5" /> LibreOffice
             </button>
-          ))}
+          )}
         </div>
         <div className="flex items-center gap-2">
-          {saveMsg && (
-            <span className={`text-xs font-medium ${saveMsg.startsWith("✓") ? "text-green-600" : "text-red-600"}`}>
-              {saveMsg}
-            </span>
-          )}
-          {mode === "edit" && (
-            <Button size="sm" onClick={handleSave} disabled={saving} className="rounded-xl">
-              {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
-              {saving ? "Saving…" : "Save changes"}
-            </Button>
-          )}
           <Button size="sm" variant="outline" onClick={handleDownload} className="rounded-xl">
             <Download className="mr-1.5 h-3.5 w-3.5" /> Download
           </Button>
@@ -205,8 +206,39 @@ function DocumentPanel({ contractId }: { contractId: string }) {
         </div>
       </div>
 
+      {/* LibreOffice (Collabora Online) */}
+      {mode === "libreoffice" && (
+        <div style={{ height: "80vh" }}>
+          {wopiLoading && (
+            <div className="flex h-full items-center justify-center gap-3 text-slate-500">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-sm">Loading LibreOffice editor…</span>
+            </div>
+          )}
+          {wopiError && (
+            <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+              <p className="text-sm font-medium text-red-600">{wopiError}</p>
+              <button
+                onClick={() => { setWopiUrl(null); setWopiError(null); loadWopiUrl(); }}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          {wopiUrl && !wopiLoading && (
+            <iframe
+              src={wopiUrl}
+              title="LibreOffice Editor"
+              className="h-full w-full border-0"
+              allow="clipboard-read; clipboard-write"
+            />
+          )}
+        </div>
+      )}
+
       {/* Content */}
-      {mode === "preview" ? (
+      {mode === "preview" && (
         <>
           {isPdf && <iframe src={viewUrl} title="Contract document" className="w-full" style={{ height: "72vh", border: "none" }} />}
           {isDocx && (
@@ -232,25 +264,6 @@ function DocumentPanel({ contractId }: { contractId: string }) {
             </div>
           )}
         </>
-      ) : (
-        <div className="relative">
-          <textarea
-            value={editText}
-            onChange={(e) => setEditText(e.target.value)}
-            spellCheck
-            className="w-full resize-none bg-white px-10 py-8 font-mono text-sm text-slate-800 outline-none"
-            style={{ minHeight: "72vh" }}
-            placeholder="Start typing your contract content here…"
-          />
-          {editText !== text && (
-            <div className="absolute bottom-4 right-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 shadow-sm">
-              <span className="text-xs text-slate-500">Unsaved changes</span>
-              <button onClick={() => setEditText(text)} className="text-slate-400 hover:text-slate-600" title="Discard">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )}
-        </div>
       )}
     </div>
   );

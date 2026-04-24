@@ -20,6 +20,7 @@ import AdminUsersPage from "./pages/admin-users-page";
 import AdminAuditPage from "./pages/admin-audit-page";
 import AdminApprovalsPage from "./pages/admin-approvals-page";
 import AdminNotificationsPage from "./pages/admin-notifications-page";
+import ReportsPage from "./pages/reports-page";
 import WorkflowsPage from "./pages/workflows-page";
 import WorkflowDetailPage from "./pages/workflow-detail-page";
 import UploadPipelinePage from "./pages/upload-pipeline-page";
@@ -182,6 +183,7 @@ export default function App() {
                     path="/admin/notifications"
                     element={<AdminNotificationsPage />}
                   />
+                  <Route path="/admin/reports" element={<ReportsPage />} />
                   <Route path="/admin/workflows" element={<WorkflowsPage />} />
                   <Route
                     path="/admin/workflows/:id"
