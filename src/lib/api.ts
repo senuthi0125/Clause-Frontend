@@ -291,6 +291,7 @@ export const api = {
       body: JSON.stringify({ text }),
     }),
 
+
   scanContractConflicts: (contractId: string) =>
     request<ConflictResult>(`/api/ai/conflicts/scan/${contractId}`, {
       method: "POST",

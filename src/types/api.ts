@@ -343,3 +343,4 @@ export type UserPreferences = {
   pinned_contracts: PinnedContract[];
   accent_color: string;
 };
+
