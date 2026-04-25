@@ -159,23 +159,23 @@ export function AppShell({
       >
         <div className="relative flex w-full flex-col items-center">
           {isActive && (
-            <span className="absolute left-0 top-1/2 h-8 w-1 -translate-y-1/2 rounded-r-full bg-cyan-300 shadow-[0_0_12px_rgba(103,232,249,0.9)]" />
+            <span className="absolute left-0 top-1/2 h-9 w-1 -translate-y-1/2 rounded-r-full bg-cyan-300 shadow-[0_0_12px_rgba(103,232,249,0.9)]" />
           )}
 
           <div
             className={cn(
-              "relative flex h-12 w-12 items-center justify-center rounded-2xl transition-all duration-200",
+              "relative flex h-14 w-14 items-center justify-center rounded-2xl transition-all duration-200",
               isActive
                 ? "bg-white text-indigo-600 shadow-lg"
                 : "text-white/85 hover:bg-white/14 hover:text-white"
             )}
           >
-            <Icon className="h-5 w-5" />
+            <Icon className="h-6 w-6" />
           </div>
 
           <span
             className={cn(
-              "mt-1.5 block max-w-[104px] text-center text-[10px] font-medium leading-3 transition-all duration-200",
+              "mt-1.5 block max-w-[120px] text-center text-[11px] font-medium leading-tight transition-all duration-200",
               isActive
                 ? "text-white"
                 : "text-white/72 group-hover:text-white"
@@ -221,22 +221,22 @@ export function AppShell({
 
   const DesktopSidebarContent = () => (
     <div className="flex h-full flex-col items-center">
-      <div className="pt-4">
+      <div className="pt-5">
         <div className="flex h-16 w-16 items-center justify-center rounded-[22px] bg-white/14 shadow-lg backdrop-blur-sm">
           <div className="flex h-12 w-12 items-center justify-center rounded-[20px] bg-gradient-to-br from-cyan-400 via-blue-500 to-violet-500 shadow-[0_10px_24px_rgba(59,130,246,0.35)]">
-            <FileText className="h-5 w-5 text-white" />
+            <FileText className="h-6 w-6 text-white" />
           </div>
         </div>
       </div>
 
       <div className="mt-4 text-center">
-        <p className="text-sm font-semibold tracking-tight text-white">clause</p>
+        <p className="text-[15px] font-semibold tracking-tight text-white">clause</p>
         <p className="mt-0.5 text-xs text-white/55">workspace</p>
       </div>
 
       <div className="my-4 h-px w-14 bg-white/15" />
 
-      <nav className="flex min-h-0 flex-1 flex-col items-center gap-3 overflow-y-auto px-2 pb-3">
+      <nav className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto px-2 pb-3">
         {mainNavigation.map((item) => (
           <DesktopNavLink key={item.href} item={item} />
         ))}
@@ -350,9 +350,9 @@ export function AppShell({
       )}
 
       <div className="flex min-h-screen">
-        <aside className="hidden w-[188px] shrink-0 lg:flex">
-          <div className="flex w-full items-center justify-center px-5 py-8">
-            <div className="h-full min-h-[760px] w-[132px] rounded-[34px] bg-gradient-to-b from-[#6A67F6] via-[#6B63F2] to-[#7164FF] p-3 shadow-[0_30px_60px_-30px_rgba(91,82,255,0.75)] ring-1 ring-white/30">
+        <aside className="hidden w-[220px] shrink-0 lg:flex">
+          <div className="flex w-full items-center justify-center px-5 py-6">
+            <div className="flex h-full min-h-[calc(100vh-48px)] w-full flex-col rounded-[34px] bg-gradient-to-b from-[#6A67F6] via-[#6B63F2] to-[#7164FF] p-3 shadow-[0_30px_60px_-30px_rgba(91,82,255,0.75)] ring-1 ring-white/30">
               <DesktopSidebarContent />
             </div>
           </div>
