@@ -143,8 +143,8 @@ export function AppShell({
     onClick?: () => void;
   }) => {
     const isActive =
-      item.href === "/dashboard"
-        ? location.pathname === "/dashboard"
+      item.href === "/dashboard" || item.href === "/admin"
+        ? location.pathname === item.href
         : location.pathname.startsWith(item.href);
 
     const Icon = item.icon;
@@ -196,8 +196,8 @@ export function AppShell({
     onClick?: () => void;
   }) => {
     const isActive =
-      item.href === "/dashboard"
-        ? location.pathname === "/dashboard"
+      item.href === "/dashboard" || item.href === "/admin"
+        ? location.pathname === item.href
         : location.pathname.startsWith(item.href);
 
     const Icon = item.icon;
