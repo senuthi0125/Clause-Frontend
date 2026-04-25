@@ -20,6 +20,7 @@ import type {
   UsersListResponse,
   ValueByType,
   Workflow,
+  WorkflowTemplate,
 } from "../types/api";
 
 const API_BASE_URL =
@@ -290,6 +291,37 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ text }),
     }),
+
+  getDocumentHtml: (contractId: string) =>
+    request<{ html: string; title: string }>(`/api/documents/html/${contractId}`),
+
+  saveDocumentHtml: (contractId: string, html: string, title: string) =>
+    request<{ message: string }>(`/api/documents/html/${contractId}`, {
+      method: "PUT",
+      body: JSON.stringify({ html, title }),
+    }),
+
+  exportDocument: async (contractId: string, format: "docx" | "pdf", filename: string) => {
+    const token = await resolveToken();
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+    const response = await fetch(
+      `${API_BASE_URL}/api/documents/export/${contractId}?format=${format}`,
+      { headers }
+    );
+    if (!response.ok) throw new Error(`Export failed: ${response.statusText}`);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
+
+  listWorkflowTemplates: () =>
+    request<WorkflowTemplate[]>("/api/workflow-templates/"),
 
 
   scanContractConflicts: (contractId: string) =>
