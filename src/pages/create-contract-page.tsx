@@ -45,6 +45,10 @@ function blankParty(): ContractParty {
   };
 }
 
+const inputLabel = "flex flex-col gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-300";
+const selectClass = "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white";
+const textareaClass = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white min-h-[80px] resize-y";
+
 export default function CreateContractPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();

@@ -19,7 +19,7 @@ import { AppCard } from "@/components/ui/app-card";
 import { AppBadge } from "@/components/ui/app-badge";
 import { AppEmptyState } from "@/components/ui/app-empty-state";
 import { api } from "@/lib/api";
-import { formatDate as fmtDate } from "@/lib/utils";
+import { formatLabel } from "@/lib/utils";
 
 type ContractEvent = {
   id: string;

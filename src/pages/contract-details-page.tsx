@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   CircleDollarSign,
   Download,
-  Eye,
   FileEdit,
   FileText,
   Layers,
@@ -51,63 +50,17 @@ const STEP_LABELS: Record<number, string> = {
   9: "Renewal / Expiration",
 };
 
-// ─── Document viewer ─────────────────────────────────────────────────────────
-
-type ViewMode = "preview" | "libreoffice";
+// ─── Document viewer / editor ────────────────────────────────────────────────
 
 function DocumentPanel({ contractId, contractTitle }: { contractId: string; contractTitle?: string }) {
-  const [mode, setMode] = useState<ViewMode>("libreoffice");
   const [fileType, setFileType] = useState("");
   const [hasFile, setHasFile] = useState(false);
-  const [text, setText] = useState("");
-  const [docxHtml, setDocxHtml] = useState("");
   const [loading, setLoading] = useState(true);
-  const [docxLoading, setDocxLoading] = useState(false);
   const [wopiUrl, setWopiUrl] = useState<string | null>(null);
   const [wopiLoading, setWopiLoading] = useState(false);
   const [wopiError, setWopiError] = useState<string | null>(null);
 
   const viewUrl = `${API_BASE_URL}/api/documents/view/${contractId}`;
-  const isPdf = fileType === ".pdf";
-  const isDocx = fileType === ".docx" || fileType === ".doc";
-  const isTxt = fileType === ".txt" || fileType === ".rtf" || fileType === ".odt";
-  const canLibreOffice = hasFile;
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    api.getDocumentText(contractId)
-      .then((r) => {
-        if (!cancelled) {
-          setFileType(r.file_type || "");
-          setHasFile(r.has_file);
-          setText(r.text || "");
-        }
-      })
-      .catch(() => { })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [contractId]);
-
-  const loadDocxHtml = useCallback(async () => {
-    if (!isDocx || docxHtml || docxLoading) return;
-    setDocxLoading(true);
-    try {
-      const resp = await fetch(viewUrl);
-      const buf = await resp.arrayBuffer();
-      const mammoth = await import("mammoth");
-      const result = await mammoth.convertToHtml({ arrayBuffer: buf });
-      setDocxHtml(result.value);
-    } catch {
-      setDocxHtml("<p style='color:#888'>Could not render DOCX — download to view.</p>");
-    } finally {
-      setDocxLoading(false);
-    }
-  }, [isDocx, docxHtml, docxLoading, viewUrl]);
-
-  useEffect(() => {
-    if (isDocx && mode === "preview") loadDocxHtml();
-  }, [isDocx, mode, loadDocxHtml]);
 
   const loadWopiUrl = useCallback(async () => {
     if (wopiUrl || wopiLoading) return;
@@ -124,8 +77,22 @@ function DocumentPanel({ contractId, contractTitle }: { contractId: string; cont
   }, [contractId, wopiUrl, wopiLoading]);
 
   useEffect(() => {
-    if (mode === "libreoffice") loadWopiUrl();
-  }, [mode, loadWopiUrl]);
+    let cancelled = false;
+    setLoading(true);
+    api.getDocumentText(contractId)
+      .then((r) => {
+        if (cancelled) return;
+        setFileType(r.file_type || "");
+        setHasFile(r.has_file);
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [contractId]);
+
+  useEffect(() => {
+    if (hasFile) loadWopiUrl();
+  }, [hasFile, loadWopiUrl]);
 
   function handleDownload() {
     const a = document.createElement("a");
@@ -158,27 +125,13 @@ function DocumentPanel({ contractId, contractTitle }: { contractId: string; cont
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       {/* Toolbar */}
-      <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-5 py-3">
-        <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1">
-          <button
-            onClick={() => setMode("preview")}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${mode === "preview" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
-              }`}
-          >
-            <Eye className="h-3.5 w-3.5" /> Preview
-          </button>
-          {canLibreOffice && (
-            <button
-              onClick={() => setMode("libreoffice")}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${mode === "libreoffice" ? "bg-indigo-600 text-white" : "text-slate-600 hover:bg-slate-100"
-                }`}
-            >
-              <FileEdit className="h-3.5 w-3.5" /> LibreOffice
-            </button>
-          )}
+      <div className="flex items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2">
+        <div className="flex items-center gap-2 text-sm font-medium text-slate-600">
+          <FileEdit className="h-4 w-4 text-indigo-500" />
+          LibreOffice Editor
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={handleDownload} className="rounded-xl">
+          <Button size="sm" variant="outline" onClick={handleDownload} className="h-8 rounded-xl">
             <Download className="mr-1.5 h-3.5 w-3.5" /> Download
           </Button>
           <Badge className="rounded-lg bg-slate-100 px-2 py-1 text-[11px] uppercase tracking-wide text-slate-600">
@@ -187,81 +140,34 @@ function DocumentPanel({ contractId, contractTitle }: { contractId: string; cont
         </div>
       </div>
 
-      {/* LibreOffice (Collabora Online) */}
-      {mode === "libreoffice" && (
-        <div style={{ height: "80vh" }}>
-          {wopiLoading && (
-            <div className="flex h-full items-center justify-center gap-3 text-slate-500">
-              <Loader2 className="h-5 w-5 animate-spin" />
-              <span className="text-sm">Loading LibreOffice editor…</span>
-            </div>
-          )}
-          {wopiError && (
-            <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-              <p className="text-sm font-medium text-red-600">{wopiError}</p>
-              <button
-                onClick={() => { setWopiUrl(null); setWopiError(null); loadWopiUrl(); }}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-              >
-                Retry
-              </button>
-            </div>
-          )}
-          {wopiUrl && !wopiLoading && (
-            <iframe
-              src={wopiUrl}
-              title="LibreOffice Editor"
-              className="h-full w-full border-0"
-              allow="clipboard-read; clipboard-write"
-            />
-          )}
-        </div>
-      )}
-
-      {/* Preview */}
-      {mode === "preview" && (
-        <>
-          {isPdf && (
-            <iframe
-              src={viewUrl}
-              title="Contract document"
-              className="w-full"
-              style={{ height: "72vh", border: "none" }}
-            />
-          )}
-          {isDocx && (
-            <div
-              className="prose prose-slate max-w-none overflow-auto px-10 py-8"
-              style={{ minHeight: "60vh", maxHeight: "72vh" }}
+      {/* LibreOffice (Collabora Online via WOPI) */}
+      <div style={{ height: "80vh" }}>
+        {wopiLoading && (
+          <div className="flex h-full items-center justify-center gap-3 text-slate-500">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span className="text-sm">Loading LibreOffice editor…</span>
+          </div>
+        )}
+        {wopiError && (
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+            <p className="text-sm font-medium text-red-600">{wopiError}</p>
+            <button
+              onClick={() => { setWopiUrl(null); setWopiError(null); loadWopiUrl(); }}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
             >
-              {docxLoading ? (
-                <div className="flex items-center gap-2 py-10 text-slate-500">
-                  <Loader2 className="h-5 w-5 animate-spin" /> Rendering…
-                </div>
-              ) : (
-                <div dangerouslySetInnerHTML={{ __html: docxHtml || "<p>No content.</p>" }} />
-              )}
-            </div>
-          )}
-          {isTxt && (
-            <pre
-              className="overflow-auto whitespace-pre-wrap break-words px-10 py-8 font-mono text-sm text-slate-800"
-              style={{ minHeight: "50vh", maxHeight: "72vh" }}
-            >
-              {text || <span className="italic text-slate-400">No text extracted.</span>}
-            </pre>
-          )}
-          {!isPdf && !isDocx && !isTxt && (
-            <div className="flex flex-col items-center gap-3 py-14 text-center">
-              <FileText className="h-10 w-10 text-slate-300" />
-              <p className="text-sm text-slate-500">Preview not supported for this file type.</p>
-              <Button variant="outline" className="rounded-xl" onClick={handleDownload}>
-                <Download className="mr-2 h-4 w-4" /> Download to view
-              </Button>
-            </div>
-          )}
-        </>
-      )}
+              Retry
+            </button>
+          </div>
+        )}
+        {wopiUrl && !wopiLoading && (
+          <iframe
+            src={wopiUrl}
+            title="LibreOffice Editor"
+            className="h-full w-full border-0"
+            allow="clipboard-read; clipboard-write"
+          />
+        )}
+      </div>
     </div>
   );
 }
