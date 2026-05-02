@@ -38,6 +38,12 @@ type GCalEvent = {
   html_link: string;
 };
 
+function fmtDate(dateStr: string): string {
+  return new Date(dateStr + "T00:00:00").toLocaleDateString(undefined, {
+    weekday: "long", year: "numeric", month: "long", day: "numeric",
+  });
+}
+
 function getDaysUntil(dateStr: string): number {
   const now = new Date();
   now.setHours(0, 0, 0, 0);

@@ -503,6 +503,15 @@ export const api = {
       { method: "POST" }
     ),
 
+  getNotificationSettings: () =>
+    request<Record<string, unknown>>("/api/notifications/settings"),
+
+  saveNotificationSettings: (body: Record<string, unknown>) =>
+    request<{ message: string }>("/api/notifications/settings", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
   // ── Lifecycle stats ───────────────────────────────────────────────────────
   getLifecycleStats: () =>
     request<LifecycleStats>("/api/contracts/lifecycle-stats"),

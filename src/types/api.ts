@@ -337,11 +337,23 @@ export type PinnedContract = {
   status?: string;
 };
 
+export type DashboardSection =
+  | "activity_trend"
+  | "status_overview"
+  | "contracts_by_type"
+  | "expiring_docs"
+  | "recent_activity"
+  | "risk_analysis";
+
+export type SectionVisibility = Partial<Record<DashboardSection, boolean>>;
+
 export type UserPreferences = {
   widget_visibility: WidgetVisibility;
+  section_visibility: SectionVisibility;
   default_contract_filter: string;
   pinned_contracts: PinnedContract[];
   accent_color: string;
+  activity_count: number;
 };
 
 // ─── Workflow Templates ───────────────────────────────────────────────────────

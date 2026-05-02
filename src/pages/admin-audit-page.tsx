@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Filter, RefreshCw } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
+import { AppCard } from "@/components/ui/app-card";
+import { AppInput } from "@/components/ui/app-input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import { formatDateTime } from "@/lib/utils";
 import type { AuditLogResponse } from "@/types/api";
@@ -21,12 +22,12 @@ function actionBadgeClass(action: string) {
   return "bg-slate-100 text-slate-700";
 }
 
-export default function AdminAuditPage() {
+export function AdminAuditContent() {
   const [data, setData] = useState<AuditLogResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const [perPage] = useState(50);
+  const [perPage, setPerPage] = useState(25);
 
   const [resourceType, setResourceType] = useState("");
   const [actionFilter, setActionFilter] = useState("");
@@ -71,15 +72,20 @@ export default function AdminAuditPage() {
   // Load on page change
   useEffect(() => {
     loadData(page);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, perPage]);
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
     const interval = setInterval(() => loadData(page), 30_000);
     return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
+
+  const handlePerPageChange = (value: number) => {
+    setPerPage(value);
+    setPage(1);
+  };
 
   const applyFilters = () => {
     if (page === 1) {
@@ -104,25 +110,20 @@ export default function AdminAuditPage() {
   const totalPages = data?.total_pages ?? 1;
 
   return (
-    <AppShell
-      title="Audit Logs"
-      subtitle="Immutable record of system activity (admin/manager only)."
-      actions={
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
-            </span>
-            Live · refreshes every 30s
+    <>
+      <div className="mb-4 flex items-center justify-between">
+        <span className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
           </span>
-          <Button variant="outline" onClick={() => loadData(page)}>
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Refresh
-          </Button>
-        </div>
-      }
-    >
+          Live · refreshes every 30s
+        </span>
+        <Button variant="outline" onClick={() => loadData(page)}>
+          <RefreshCw className="mr-2 h-4 w-4" />
+          Refresh
+        </Button>
+      </div>
       {error ? (
         <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
@@ -171,17 +172,35 @@ export default function AdminAuditPage() {
               placeholder="clerk_id"
             />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </AppCard>
 
       <Card className="border border-slate-200 bg-white shadow-sm">
         <CardContent className="p-5">
-          <div className="mb-3 flex items-center justify-between text-sm">
+          <div className="mb-3 flex items-center justify-between gap-4 text-sm">
             <p className="text-slate-500">
               {loading
                 ? "Loading audit logs..."
                 : `${data?.total ?? 0} log${(data?.total ?? 0) === 1 ? "" : "s"}`}
             </p>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs text-slate-400">Rows per page</span>
+              <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+                {[10, 25, 50, 100].map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => handlePerPageChange(n)}
+                    className={`px-2.5 py-1 text-xs font-medium transition-colors ${
+                      perPage === n
+                        ? "bg-slate-900 text-white"
+                        : "bg-white text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -266,6 +285,14 @@ export default function AdminAuditPage() {
           ) : null}
         </CardContent>
       </Card>
+    </>
+  );
+}
+
+export default function AdminAuditPage() {
+  return (
+    <AppShell title="Audit Logs" subtitle="Immutable record of system activity (admin/manager only).">
+      <AdminAuditContent />
     </AppShell>
   );
 }

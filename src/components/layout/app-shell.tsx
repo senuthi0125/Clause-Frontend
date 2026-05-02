@@ -1,23 +1,15 @@
 import { Link, useLocation } from "react-router-dom";
-import { useEffect, useState } from "react";
-import { ChatPopup } from "@/components/chat-popup";
+import { useState } from "react";
 import {
-  BarChart2,
   Bell,
   CalendarDays,
-  CheckCheck,
   FileText,
   LayoutDashboard,
-  Layers,
   Menu,
   Moon,
   Shield,
-  ShieldAlert,
   Sun,
-  Users,
-  ScrollText,
   LockKeyhole,
-  Workflow,
   Settings,
   X,
 } from "lucide-react";
@@ -81,58 +73,22 @@ export function AppShell({
 }: AppShellProps) {
   const location = useLocation();
   const { user } = useUser();
-  const { role, isAdmin, isManager, isAdminOrManager } = useRole();
-  const [adminMode, setAdminMode] = useState(false);
+  const { role, isAdmin, isAdminOrManager } = useRole();
   const [mobileOpen, setMobileOpen] = useState(false);
   void contractGroups;
-
-  useEffect(() => {
-    if (!isAdminOrManager) {
-      localStorage.removeItem("admin_mode");
-      setAdminMode(false);
-      return;
-    }
-    const stored = localStorage.getItem("admin_mode");
-    if (stored === "true") setAdminMode(true);
-    if (location.pathname.startsWith("/admin")) {
-      localStorage.setItem("admin_mode", "true");
-      setAdminMode(true);
-    }
-  }, [isAdminOrManager, location.pathname]);
 
   const mainNavigation = [
     { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { label: "Contracts", href: "/contracts", icon: FileText },
 { label: "Conflict Detection", href: "/conflict-detection", icon: Shield },
     { label: "Calendar", href: "/calendar", icon: CalendarDays },
-    { label: "Risk Analysis", href: "/risk-analysis", icon: ShieldAlert },
     { label: "Settings", href: "/settings", icon: Settings },
   ];
 
-  const adminNavigation = [
-    { label: "Admin Dashboard", href: "/admin", icon: LockKeyhole },
-    { label: "User Management", href: "/admin/users", icon: Users },
-    { label: "Workflows", href: "/admin/workflows", icon: Workflow },
-    { label: "Workflow Templates", href: "/admin/workflow-templates", icon: Layers },
-    { label: "Approvals", href: "/admin/approvals", icon: CheckCheck },
-    { label: "Audit Logs", href: "/admin/audit", icon: ScrollText },
-    { label: "Notifications & Alerts", href: "/admin/notifications", icon: Bell },
-    { label: "Reports", href: "/admin/reports", icon: BarChart2 },
-  ];
-
-  const managerNavigation = [
-    { label: "Workflows", href: "/admin/workflows", icon: Workflow },
-    { label: "Approvals", href: "/admin/approvals", icon: CheckCheck },
-    { label: "Reports", href: "/admin/reports", icon: BarChart2 },
-  ];
-
-  const showAdminSection = isAdminOrManager && adminMode;
-  const activeNavigation = isAdmin ? adminNavigation : managerNavigation;
   const firstName = user?.firstName || user?.username || null;
 
   const handleAdminClick = () => {
     localStorage.setItem("admin_mode", "true");
-    setAdminMode(true);
   };
 
   const DesktopNavLink = ({
@@ -240,15 +196,6 @@ export function AppShell({
         {mainNavigation.map((item) => (
           <DesktopNavLink key={item.href} item={item} />
         ))}
-
-        {showAdminSection && (
-          <>
-            <div className="my-2 h-px w-14 bg-white/12" />
-            {activeNavigation.map((item) => (
-              <DesktopNavLink key={item.href} item={item} />
-            ))}
-          </>
-        )}
       </nav>
 
     </div>
@@ -290,24 +237,6 @@ export function AppShell({
           ))}
         </div>
 
-        {showAdminSection && (
-          <div className="mt-6">
-            <div className="mb-2 px-3.5">
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/35">
-                {isAdmin ? "Admin" : "Management"}
-              </p>
-            </div>
-            <div className="space-y-1">
-              {activeNavigation.map((item) => (
-                <MobileNavLink
-                  key={item.href}
-                  item={item}
-                  onClick={() => setMobileOpen(false)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
       </nav>
 
       <div className="mx-4 mb-4 mt-2 h-px bg-white/10" />
@@ -445,7 +374,6 @@ export function AppShell({
         </div>
       </div>
 
-      <ChatPopup />
     </div>
   );
 }

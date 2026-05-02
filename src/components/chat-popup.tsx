@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, Loader2, Paperclip, Send, Sparkles, User, X } from "lucide-react";
+import { Bot, Loader2, Paperclip, Send, Sparkles, Trash2, User, X } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +15,8 @@ type Message = {
 
 const ACCEPTED = ".pdf,.txt,.md,.rtf,.docx";
 const MAX_FILE_MB = 20;
+const SESSION_KEY = "clause_chat_history";
+const INTRO: Message = { id: "intro", role: "assistant", content: "Hi! Ask me anything about contracts, or upload a document to discuss." };
 
 function createId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -20,9 +24,13 @@ function createId() {
 
 export function ChatPopup() {
   const [open, setOpen]               = useState(false);
-  const [messages, setMessages]       = useState<Message[]>([
-    { id: "intro", role: "assistant", content: "Hi! Ask me anything about contracts, or upload a document to discuss." },
-  ]);
+  const [messages, setMessages]       = useState<Message[]>(() => {
+    try {
+      const stored = sessionStorage.getItem(SESSION_KEY);
+      if (stored) return JSON.parse(stored) as Message[];
+    } catch { /* ignore */ }
+    return [INTRO];
+  });
   const [input, setInput]             = useState("");
   const [loading, setLoading]         = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -39,6 +47,16 @@ export function ChatPopup() {
   useEffect(() => {
     if (open) textareaRef.current?.focus();
   }, [open]);
+
+  useEffect(() => {
+    const saveable = messages.filter((m) => !m.pending);
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(saveable));
+  }, [messages]);
+
+  const clearChat = () => {
+    setMessages([INTRO]);
+    sessionStorage.removeItem(SESSION_KEY);
+  };
 
   const clearFile = () => {
     setPendingFile(null);
@@ -133,6 +151,13 @@ export function ChatPopup() {
               <p className="text-[11px] text-white/70">Contract assistant</p>
             </div>
             <button
+              onClick={clearChat}
+              title="Clear chat"
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-white/70 transition hover:bg-white/15 hover:text-white"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+            <button
               onClick={() => setOpen(false)}
               className="flex h-7 w-7 items-center justify-center rounded-lg text-white/70 transition hover:bg-white/15 hover:text-white"
             >
@@ -166,7 +191,15 @@ export function ChatPopup() {
                           <Paperclip className="h-3 w-3" />{msg.fileName}
                         </p>
                       )}
-                      <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                      {isUser ? (
+                        <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                      ) : (
+                        <div className="prose-chat">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {msg.content}
+                          </ReactMarkdown>
+                        </div>
+                      )}
                       {msg.pending && (
                         <span className="mt-1 flex items-center gap-1 text-xs text-slate-400">
                           <Loader2 className="h-3 w-3 animate-spin" /> Generating…

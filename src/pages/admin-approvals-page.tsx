@@ -32,7 +32,7 @@ function badgeClass(value?: string | null) {
   }
 }
 
-export default function AdminApprovalsPage() {
+export function AdminApprovalsContent() {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -128,11 +128,7 @@ export default function AdminApprovalsPage() {
   }, [approvals]);
 
   return (
-    <AppShell
-      title="Admin Approvals"
-      subtitle="Review approval activity across all backend contracts."
-      contractGroups={contractGroups}
-    >
+    <>
       {error ? (
         <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
@@ -226,6 +222,14 @@ export default function AdminApprovalsPage() {
           )}
         </CardContent>
       </Card>
+    </>
+  );
+}
+
+export default function AdminApprovalsPage() {
+  return (
+    <AppShell title="Admin Approvals" subtitle="Review approval activity across all backend contracts.">
+      <AdminApprovalsContent />
     </AppShell>
   );
 }

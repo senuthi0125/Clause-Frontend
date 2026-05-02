@@ -201,7 +201,7 @@ function ReportChart({ result }: { result: ReportResult }) {
 
 // ── Page ───────────────────────────────────────────────────────────────────
 
-export default function ReportsPage() {
+export function ReportsContent() {
   const [presets, setPresets] = useState<ReportPreset[]>([]);
   const [presetsLoading, setPresetsLoading] = useState(true);
 
@@ -300,10 +300,7 @@ export default function ReportsPage() {
   const canRun = measures.length > 0 && !running;
 
   return (
-    <AppShell
-      title="Reports"
-      subtitle="Build, run, and export custom contract reports."
-    >
+    <>
       {/* Quick Reports */}
       <div className="mb-6">
         <p className="mb-3 text-xs uppercase tracking-[0.24em] text-slate-400">
@@ -551,6 +548,14 @@ export default function ReportsPage() {
           </CardContent>
         </Card>
       )}
+    </>
+  );
+}
+
+export default function ReportsPage() {
+  return (
+    <AppShell title="Reports" subtitle="Build, run, and export custom contract reports.">
+      <ReportsContent />
     </AppShell>
   );
 }
