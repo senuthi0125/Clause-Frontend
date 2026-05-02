@@ -512,6 +512,11 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  bootstrapAdmin: () =>
+    request<{ message: string; user: Record<string, unknown> }>("/api/auth/bootstrap-admin", {
+      method: "POST",
+    }),
+
   // ── Lifecycle stats ───────────────────────────────────────────────────────
   getLifecycleStats: () =>
     request<LifecycleStats>("/api/contracts/lifecycle-stats"),
