@@ -45,7 +45,7 @@ function statusBadgeClass(status?: string | null) {
   }
 }
 
-export default function AdminUsersPage() {
+export function AdminUsersContent() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [search, setSearch] = useState("");
@@ -160,11 +160,7 @@ export default function AdminUsersPage() {
   };
 
   return (
-    <AppShell
-      title="User Management"
-      subtitle="Modify user roles and deactivate accounts (admin only)."
-      contractGroups={contractGroups}
-    >
+    <>
       {error && (
         <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
@@ -331,6 +327,14 @@ export default function AdminUsersPage() {
           )}
         </CardContent>
       </Card>
+    </>
+  );
+}
+
+export default function AdminUsersPage() {
+  return (
+    <AppShell title="User Management" subtitle="Modify user roles and deactivate accounts (admin only).">
+      <AdminUsersContent />
     </AppShell>
   );
 }

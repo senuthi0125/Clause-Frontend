@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import type { PinnedContract, UserPreferences, WidgetVisibility } from "@/types/api";
+import type { DashboardSection, PinnedContract, SectionVisibility, UserPreferences, WidgetVisibility } from "@/types/api";
 
 const DEFAULT_PREFS: UserPreferences = {
   widget_visibility: {
@@ -9,9 +9,11 @@ const DEFAULT_PREFS: UserPreferences = {
     pending_approvals: true,
     high_risk: true,
   },
+  section_visibility: {},
   default_contract_filter: "",
   pinned_contracts: [],
   accent_color: "indigo",
+  activity_count: 10,
 };
 
 const LS_KEY = "clause_user_prefs";
@@ -84,6 +86,35 @@ export function usePreferences() {
     [debounce]
   );
 
+  const setSectionVisibility = useCallback(
+    (key: DashboardSection, visible: boolean) => {
+      setPrefs((prev) => {
+        const next: UserPreferences = {
+          ...prev,
+          section_visibility: { ...prev.section_visibility, [key]: visible },
+        };
+        saveToLS(next);
+        debounce(() => {
+          api.updatePreferences({ section_visibility: next.section_visibility }).catch(() => {});
+        }, 500);
+        return next;
+      });
+    },
+    [debounce]
+  );
+
+  const setActivityCount = useCallback(
+    (count: number) => {
+      setPrefs((prev) => {
+        const next: UserPreferences = { ...prev, activity_count: count };
+        saveToLS(next);
+        debounce(() => { api.updatePreferences({ activity_count: count }).catch(() => {}); }, 300);
+        return next;
+      });
+    },
+    [debounce]
+  );
+
   const setDefaultFilter = useCallback(
     (filter: string) => {
       setPrefs((prev) => {
@@ -144,6 +175,8 @@ export function usePreferences() {
     prefs,
     loading,
     setWidgetVisibility,
+    setSectionVisibility,
+    setActivityCount,
     setDefaultFilter,
     setAccentColor,
     pinContract,

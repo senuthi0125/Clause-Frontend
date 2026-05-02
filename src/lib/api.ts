@@ -503,6 +503,20 @@ export const api = {
       { method: "POST" }
     ),
 
+  getNotificationSettings: () =>
+    request<Record<string, unknown>>("/api/notifications/settings"),
+
+  saveNotificationSettings: (body: Record<string, unknown>) =>
+    request<{ message: string }>("/api/notifications/settings", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
+  bootstrapAdmin: () =>
+    request<{ message: string; user: Record<string, unknown> }>("/api/auth/bootstrap-admin", {
+      method: "POST",
+    }),
+
   // ── Lifecycle stats ───────────────────────────────────────────────────────
   getLifecycleStats: () =>
     request<LifecycleStats>("/api/contracts/lifecycle-stats"),

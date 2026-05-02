@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
+  CalendarClock,
   CheckCircle2,
   Clock3,
   FileText,
   Pin,
   PinOff,
   ShieldAlert,
+  ShieldCheck,
+  ShieldQuestion,
   Sparkles,
   TrendingUp,
   BarChart3,
@@ -25,10 +28,11 @@ import {
   Bar,
 } from "recharts";
 import { AppShell } from "@/components/layout/app-shell";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { api } from "@/lib/api";
-import { formatLabel as formatTypeLabel, formatDate, statusBadgeClass as statusBadgeClass } from "@/lib/utils";
+import { api, buildContractsQuery } from "@/lib/api";
+import { formatLabel as formatTypeLabel, formatDate, formatCurrency, statusBadgeClass as statusBadgeClass } from "@/lib/utils";
+import type { Contract } from "@/types/api";
 import { usePreferences } from "@/hooks/use-preferences";
 import { useTheme } from "@/components/theme-provider";
 import type { DashboardStats } from "@/types/api";
@@ -274,10 +278,13 @@ export default function DashboardPage() {
   const [statuses, setStatuses] = useState<StatusItem[]>([]);
   const [expiring, setExpiring] = useState<ExpiringItem[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [allContracts, setAllContracts] = useState<Contract[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const { prefs, pinContract, unpinContract } = usePreferences();
+  const sec = (key: string) => prefs.section_visibility?.[key as keyof typeof prefs.section_visibility] !== false;
+  const actCount = prefs.activity_count ?? 10;
   const { resolvedTheme } = useTheme();
   const dark = resolvedTheme === "dark";
 
@@ -289,13 +296,14 @@ export default function DashboardPage() {
       setLoading(true);
       setError(null);
 
-      const [statsData, typeData, statusData, expiringData, activityData] =
+      const [statsData, typeData, statusData, expiringData, activityData, contractsData] =
         await Promise.all([
           api.getDashboardStats(),
           api.getContractsByType(),
           api.getContractsByStatus(),
           api.getExpiringSoon(),
           api.getRecentActivity(),
+          api.listContracts(buildContractsQuery({ per_page: 200 })),
         ]);
 
       setStats(statsData);
@@ -303,6 +311,7 @@ export default function DashboardPage() {
       setStatuses(statusData);
       setExpiring(expiringData);
       setActivity(activityData);
+      setAllContracts(contractsData.contracts ?? []);
     } catch (err) {
       setError(
         err instanceof Error
@@ -334,6 +343,59 @@ export default function DashboardPage() {
   const mediumRisk = stats?.risk_summary.medium ?? 0;
   const lowRisk = stats?.risk_summary.low ?? 0;
   const totalRisk = lowRisk + mediumRisk + highRisk;
+
+  const unratedCount = useMemo(
+    () => allContracts.filter(c => !c.risk_level).length,
+    [allContracts]
+  );
+
+  const riskyContracts = useMemo(() => {
+    const riskWeight = (v?: string | null) =>
+      v?.toLowerCase() === "high" ? 3 : v?.toLowerCase() === "medium" ? 2 : v?.toLowerCase() === "low" ? 1 : 0;
+    const daysLeft = (d?: string | null) => {
+      if (!d) return null;
+      const diff = new Date(d).getTime() - Date.now();
+      return isNaN(diff) ? null : Math.ceil(diff / 86400000);
+    };
+    return [...allContracts]
+      .filter(c => c.risk_level?.toLowerCase() === "high" || c.risk_level?.toLowerCase() === "medium")
+      .sort((a, b) => {
+        const rDiff = riskWeight(b.risk_level) - riskWeight(a.risk_level);
+        if (rDiff !== 0) return rDiff;
+        const ad = daysLeft(a.end_date), bd = daysLeft(b.end_date);
+        if (ad == null && bd == null) return 0;
+        if (ad == null) return 1;
+        if (bd == null) return -1;
+        return ad - bd;
+      });
+  }, [allContracts]);
+
+  const expiringRisky = useMemo(() => {
+    const daysLeft = (d?: string | null) => {
+      if (!d) return null;
+      const diff = new Date(d).getTime() - Date.now();
+      return isNaN(diff) ? null : Math.ceil(diff / 86400000);
+    };
+    return riskyContracts.filter(c => { const d = daysLeft(c.end_date); return d != null && d <= 90; }).slice(0, 6);
+  }, [riskyContracts]);
+
+  const riskByType = useMemo(() => {
+    const map = new Map<string, { total: number; high: number; medium: number; low: number; unrated: number }>();
+    allContracts.forEach(c => {
+      const key = formatTypeLabel(c.contract_type || "other");
+      if (!map.has(key)) map.set(key, { total: 0, high: 0, medium: 0, low: 0, unrated: 0 });
+      const g = map.get(key)!;
+      g.total++;
+      const r = (c.risk_level || "").toLowerCase();
+      if (r === "high") g.high++; else if (r === "medium") g.medium++; else if (r === "low") g.low++; else g.unrated++;
+    });
+    return [...map.entries()].map(([type, v]) => ({ type, ...v })).sort((a, b) => b.total - a.total);
+  }, [allContracts]);
+
+  const topRiskType = useMemo(() => {
+    if (!riskByType.length) return null;
+    return [...riskByType].sort((a, b) => (b.high * 3 + b.medium * 2) - (a.high * 3 + a.medium * 2))[0];
+  }, [riskByType]);
 
   const topStatus = useMemo(() => {
     if (!statuses.length) return null;
@@ -525,7 +587,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <section className="rounded-3xl border border-slate-200/80 dark:border-white/8 bg-white dark:bg-[#131829] p-6 shadow-sm">
+        {sec("activity_trend") && <section className="rounded-3xl border border-slate-200/80 dark:border-white/8 bg-white dark:bg-[#131829] p-6 shadow-sm">
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
               <div className="mb-1.5 flex items-center gap-2">
@@ -609,9 +671,9 @@ export default function DashboardPage() {
               </AreaChart>
             </ResponsiveContainer>
           )}
-        </section>
+        </section>}
 
-        <section className="grid gap-6 xl:grid-cols-[1.45fr_0.95fr]">
+        {sec("status_overview") && <section className="grid gap-6 xl:grid-cols-[1.45fr_0.95fr]">
           <Card className="rounded-3xl border border-slate-200/80 dark:border-white/8 bg-card shadow-sm">
             <CardContent className="p-6">
               <div className="mb-6 flex items-start justify-between gap-4">
@@ -804,9 +866,9 @@ export default function DashboardPage() {
               </div>
             </CardContent>
           </Card>
-        </section>
+        </section>}
 
-        <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+        {sec("contracts_by_type") && <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
           <Card className="rounded-3xl border border-slate-200/80 dark:border-white/8 bg-card shadow-sm">
             <CardContent className="p-6">
               <div className="mb-5 flex items-start justify-between gap-4">
@@ -968,9 +1030,9 @@ export default function DashboardPage() {
               </div>
             </CardContent>
           </Card>
-        </section>
+        </section>}
 
-        <section>
+        {sec("recent_activity") && <section>
           <Card className="rounded-3xl border border-slate-200/80 dark:border-white/8 bg-card shadow-sm">
             <CardContent className="p-6">
               <div className="mb-6 flex items-start justify-between gap-4">
@@ -993,7 +1055,7 @@ export default function DashboardPage() {
                 ) : null}
 
                 <div className="grid gap-4 lg:grid-cols-2">
-                  {activity.map((item) => {
+                  {activity.slice(0, actCount).map((item) => {
                     const pinned = prefs.pinned_contracts.some(
                       (p) => p.id === item.id
                     );
@@ -1065,7 +1127,208 @@ export default function DashboardPage() {
               </div>
             </CardContent>
           </Card>
-        </section>
+        </section>}
+
+        {/* ── Risk Analysis ─────────────────────────────────────────── */}
+        {sec("risk_analysis") && <section>
+          <div className="mb-4 flex items-center gap-3">
+            <ShieldAlert className="h-5 w-5 text-red-500" />
+            <h2 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-white">Risk Analysis</h2>
+          </div>
+
+          {/* Summary cards */}
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <Card className="border border-slate-200 dark:border-white/8 bg-white dark:bg-[#131829] shadow-sm">
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm text-slate-500">High Risk</p>
+                    <p className="mt-2 text-3xl font-semibold text-slate-950 dark:text-white">{loading ? "—" : highRisk}</p>
+                    <p className="mt-2 text-sm text-slate-500">Immediate attention</p>
+                  </div>
+                  <div className="rounded-2xl bg-red-50 p-3 text-red-600"><ShieldAlert className="h-6 w-6" /></div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border border-slate-200 dark:border-white/8 bg-white dark:bg-[#131829] shadow-sm">
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm text-slate-500">Medium Risk</p>
+                    <p className="mt-2 text-3xl font-semibold text-slate-950 dark:text-white">{loading ? "—" : mediumRisk}</p>
+                    <p className="mt-2 text-sm text-slate-500">Needs monitoring</p>
+                  </div>
+                  <div className="rounded-2xl bg-amber-50 p-3 text-amber-600"><AlertTriangle className="h-6 w-6" /></div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border border-slate-200 dark:border-white/8 bg-white dark:bg-[#131829] shadow-sm">
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm text-slate-500">Low Risk</p>
+                    <p className="mt-2 text-3xl font-semibold text-slate-950 dark:text-white">{loading ? "—" : lowRisk}</p>
+                    <p className="mt-2 text-sm text-slate-500">Lower priority</p>
+                  </div>
+                  <div className="rounded-2xl bg-green-50 p-3 text-green-600"><ShieldCheck className="h-6 w-6" /></div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border border-slate-200 dark:border-white/8 bg-white dark:bg-[#131829] shadow-sm">
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm text-slate-500">Risk Coverage</p>
+                    <p className="mt-2 text-3xl font-semibold text-slate-950 dark:text-white">
+                      {loading ? "—" : totalRisk + unratedCount === 0 ? "0%" : `${Math.round((totalRisk / (totalRisk + unratedCount)) * 100)}%`}
+                    </p>
+                    <p className="mt-2 text-sm text-slate-500">Rated of {loading ? "—" : totalRisk + unratedCount} contracts</p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-100 p-3 text-slate-600"><ShieldQuestion className="h-6 w-6" /></div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Risky contracts + expiring risky */}
+          <div className="mt-6 grid gap-6 xl:grid-cols-[1.25fr_0.95fr]">
+            <Card className="border border-slate-200 dark:border-white/8 bg-white dark:bg-[#131829] shadow-sm">
+              <CardHeader className="flex flex-row items-start justify-between gap-4">
+                <div>
+                  <CardTitle className="text-lg">Contracts requiring attention</CardTitle>
+                  <p className="mt-1 text-sm text-slate-500">High and medium risk contracts, sorted by severity.</p>
+                </div>
+                {topRiskType && (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 dark:bg-white/4 dark:border-white/8 px-4 py-3 text-right shrink-0">
+                    <p className="text-xs uppercase tracking-widest text-slate-400">Highest risk type</p>
+                    <p className="mt-1 text-base font-semibold text-slate-900 dark:text-white">{topRiskType.type}</p>
+                    <p className="text-xs text-slate-500">{topRiskType.high} high · {topRiskType.medium} medium</p>
+                  </div>
+                )}
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <p className="text-sm text-slate-500">Loading…</p>
+                ) : riskyContracts.length === 0 ? (
+                  <p className="text-sm text-slate-500">No high or medium risk contracts found.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {riskyContracts.slice(0, 8).map(c => (
+                      <Link key={c.id} to={`/contracts/${c.id}`}
+                        className="block rounded-2xl border border-slate-200 dark:border-white/8 p-4 transition hover:bg-slate-50 dark:hover:bg-white/4">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="font-semibold text-slate-900 dark:text-white">{c.title}</p>
+                            <p className="mt-0.5 text-sm text-slate-500 truncate">{c.description || "No description."}</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <Badge className={statusBadgeClass(c.risk_level)}>{formatTypeLabel(c.risk_level)}</Badge>
+                              <Badge className="bg-slate-100 text-slate-700">{formatTypeLabel(c.contract_type)}</Badge>
+                              <Badge className="bg-slate-100 text-slate-700">{formatTypeLabel(c.status)}</Badge>
+                            </div>
+                          </div>
+                          <div className="shrink-0 text-sm text-slate-500 text-right">
+                            <p><span className="font-medium text-slate-900 dark:text-white">Value:</span> {formatCurrency(c.value)}</p>
+                            <p className="mt-1"><span className="font-medium text-slate-900 dark:text-white">End:</span> {formatDate(c.end_date)}</p>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <div className="space-y-6">
+              <Card className="border border-slate-200 dark:border-white/8 bg-white dark:bg-[#131829] shadow-sm">
+                <CardHeader><CardTitle className="text-base">Expiring risky contracts</CardTitle></CardHeader>
+                <CardContent>
+                  {loading ? <p className="text-sm text-slate-500">Loading…</p>
+                    : expiringRisky.length === 0 ? <p className="text-sm text-slate-500">No risky contracts expiring within 90 days.</p>
+                    : (
+                      <div className="space-y-3">
+                        {expiringRisky.map(c => {
+                          const days = Math.ceil((new Date(c.end_date!).getTime() - Date.now()) / 86400000);
+                          return (
+                            <Link key={c.id} to={`/contracts/${c.id}`}
+                              className="flex items-start justify-between gap-3 rounded-2xl border border-slate-200 dark:border-white/8 p-3 transition hover:bg-slate-50 dark:hover:bg-white/4">
+                              <div className="min-w-0">
+                                <p className="truncate font-medium text-slate-900 dark:text-white">{c.title}</p>
+                                <p className="mt-0.5 text-xs text-slate-500">{formatDate(c.end_date)}</p>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <Badge className={statusBadgeClass(c.risk_level)}>{formatTypeLabel(c.risk_level)}</Badge>
+                                <div className="mt-1.5 flex items-center justify-end gap-1 text-xs text-slate-500">
+                                  <CalendarClock className="h-3.5 w-3.5" />
+                                  <span>{days} days left</span>
+                                </div>
+                              </div>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                </CardContent>
+              </Card>
+
+              <Card className="border border-slate-200 dark:border-white/8 bg-white dark:bg-[#131829] shadow-sm">
+                <CardHeader><CardTitle className="text-base">Risk summary</CardTitle></CardHeader>
+                <CardContent className="space-y-3">
+                  {[
+                    { label: "Total contracts", value: totalRisk + unratedCount },
+                    { label: "Rated contracts", value: totalRisk },
+                    { label: "Unrated contracts", value: unratedCount },
+                  ].map(row => (
+                    <div key={row.label} className="flex items-center justify-between rounded-2xl bg-slate-50 dark:bg-white/4 px-4 py-3">
+                      <span className="text-sm text-slate-600 dark:text-slate-400">{row.label}</span>
+                      <span className="text-lg font-semibold text-slate-950 dark:text-white">{loading ? "—" : row.value}</span>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
+          {/* Risk distribution by type */}
+          <Card className="mt-6 border border-slate-200 dark:border-white/8 bg-white dark:bg-[#131829] shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg">Risk distribution by contract type</CardTitle>
+              <p className="text-sm text-slate-500">Generated from live backend contract records.</p>
+            </CardHeader>
+            <CardContent>
+              {loading ? <p className="text-sm text-slate-500">Loading…</p>
+                : riskByType.length === 0 ? <p className="text-sm text-slate-500">No contract risk data available yet.</p>
+                : (
+                  <div className="space-y-4">
+                    {riskByType.map(item => {
+                      const tot = item.total || 1;
+                      return (
+                        <div key={item.type} className="rounded-2xl border border-slate-200 dark:border-white/8 p-4">
+                          <div className="mb-3 flex items-center justify-between">
+                            <p className="font-medium text-slate-900 dark:text-white">{item.type}</p>
+                            <p className="text-sm text-slate-500">{item.total} contract{item.total === 1 ? "" : "s"}</p>
+                          </div>
+                          <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                            <div className="flex h-full w-full">
+                              <div className="h-full bg-red-400" style={{ width: `${(item.high / tot) * 100}%` }} />
+                              <div className="h-full bg-amber-400" style={{ width: `${(item.medium / tot) * 100}%` }} />
+                              <div className="h-full bg-green-400" style={{ width: `${(item.low / tot) * 100}%` }} />
+                              <div className="h-full bg-slate-300" style={{ width: `${(item.unrated / tot) * 100}%` }} />
+                            </div>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                            <span className="rounded-full bg-red-50 px-3 py-1 text-red-700">High: {item.high}</span>
+                            <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-700">Medium: {item.medium}</span>
+                            <span className="rounded-full bg-green-50 px-3 py-1 text-green-700">Low: {item.low}</span>
+                            <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">Unrated: {item.unrated}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+            </CardContent>
+          </Card>
+        </section>}
       </div>
     </AppShell>
   );

@@ -19,7 +19,7 @@ import { AppCard } from "@/components/ui/app-card";
 import { AppBadge } from "@/components/ui/app-badge";
 import { AppEmptyState } from "@/components/ui/app-empty-state";
 import { api } from "@/lib/api";
-import { formatDate as fmtDate } from "@/lib/utils";
+import { formatLabel } from "@/lib/utils";
 
 type ContractEvent = {
   id: string;
@@ -37,6 +37,12 @@ type GCalEvent = {
   end: string;
   html_link: string;
 };
+
+function fmtDate(dateStr: string): string {
+  return new Date(dateStr + "T00:00:00").toLocaleDateString(undefined, {
+    weekday: "long", year: "numeric", month: "long", day: "numeric",
+  });
+}
 
 function getDaysUntil(dateStr: string): number {
   const now = new Date();

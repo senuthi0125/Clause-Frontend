@@ -14,7 +14,6 @@ import ContractTemplatePage from "./pages/contract-template-page";
 import CreateContractPage from "./pages/create-contract-page";
 import ContractDetailsPage from "./pages/contract-details-page";
 import ConflictDetectionPage from "./pages/conflict-detection-page";
-import RiskAnalysisPage from "./pages/risk-analysis-page";
 import AdminOverviewPage from "./pages/admin-overview-page";
 import AdminUsersPage from "./pages/admin-users-page";
 import AdminAuditPage from "./pages/admin-audit-page";
@@ -27,6 +26,13 @@ import WorkflowTemplatesPage from "./pages/workflow-templates-page";
 import SettingsPage from "./pages/settings-page";
 import { AuthBridge } from "./components/auth-bridge";
 import { ThemeProvider } from "./components/theme-provider";
+import { ChatPopup } from "./components/chat-popup";
+import { useRole } from "./hooks/use-role";
+
+function DashboardRouter() {
+  const { isAdmin } = useRole();
+  return isAdmin ? <AdminOverviewPage /> : <DashboardPage />;
+}
 
 const AUTH_FEATURES = [
   { text: "Centralise all your contracts in one place" },
@@ -180,15 +186,15 @@ export default function App() {
               <>
                 <SignedIn>
                   <AuthBridge />
+                  <ChatPopup />
                   <Routes>
-                    <Route path="/dashboard" element={<DashboardPage />} />
+                    <Route path="/dashboard" element={<DashboardRouter />} />
                     <Route path="/contracts" element={<ContractsPage />} />
                     <Route path="/contracts/new" element={<ContractTemplatePage />} />
                     <Route path="/contracts/create" element={<CreateContractPage />} />
                     <Route path="/contracts/:id" element={<ContractDetailsPage />} />
                     <Route path="/conflict-detection" element={<ConflictDetectionPage />} />
                     <Route path="/calendar" element={<CalendarPage />} />
-                    <Route path="/risk-analysis" element={<RiskAnalysisPage />} />
                     <Route path="/workflows" element={<WorkflowsPage />} />
                     <Route path="/workflows/:id" element={<WorkflowDetailPage />} />
                     <Route path="/admin" element={<AdminOverviewPage />} />
